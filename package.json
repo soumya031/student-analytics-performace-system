@@ -1,6 +1,6 @@
 {
-  "name": "my-app",
-  "version": "0.1.0",
+  "name": "student-analytics-performance-system",
+  "version": "1.0.0",
   "private": true,
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
@@ -10,13 +10,28 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "@mui/material": "^5.15.0",
+    "@mui/icons-material": "^5.15.0",
+    "@emotion/react": "^11.11.0",
+    "@emotion/styled": "^11.11.0",
+    "react-router-dom": "^6.20.0",
+    "axios": "^1.6.0",
+    "react-webcam": "^7.2.0",
+    "face-api.js": "^0.22.2",
+    "chart.js": "^4.4.0",
+    "react-chartjs-2": "^5.2.0",
+    "react-hook-form": "^7.48.0",
+    "react-hot-toast": "^2.4.1",
+    "jwt-decode": "^4.0.0",
+    "socket.io-client": "^4.7.4"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "dev": "concurrently \"npm start\" \"cd backend && npm run dev\" \"cd python-recommendation && python app.py\""
   },
   "eslintConfig": {
     "extends": [
@@ -35,5 +50,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }
