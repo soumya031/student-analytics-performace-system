@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import json
 from datetime import datetime
 import logging
+from typing import Optional, List, Dict, Any
 
 # Load environment variables
 load_dotenv()
@@ -27,22 +28,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # MongoDB connection
+db = None
 try:
     client = pymongo.MongoClient(os.getenv('MONGODB_URI', 'mongodb://localhost:27017/'))
     db = client['student_analytics']
     logger.info("Connected to MongoDB")
 except Exception as e:
     logger.error(f"MongoDB connection error: {e}")
-    db = None
 
 class CollaborativeFiltering:
     def __init__(self):
-        self.user_item_matrix = None
-        self.user_similarity_matrix = None
-        self.item_similarity_matrix = None
-        self.nmf_model = None
+        self.user_item_matrix: Optional[pd.DataFrame] = None
+        self.user_similarity_matrix: Optional[np.ndarray] = None
+        self.item_similarity_matrix: Optional[np.ndarray] = None
+        self.nmf_model: Optional[NMF] = None
         
-    def create_user_item_matrix(self, exam_results):
+    def create_user_item_matrix(self, exam_results: List[Dict[str, Any]]) -> Optional[pd.DataFrame]:
         """Create user-item matrix from exam results"""
         if not exam_results:
             return None
@@ -50,12 +51,16 @@ class CollaborativeFiltering:
         # Create DataFrame from exam results
         data = []
         for result in exam_results:
-            data.append({
-                'student_id': str(result['student']),
-                'subject': result['exam']['subject'],
-                'score': result['percentage']
-            })
+            if 'exam' in result and 'subject' in result['exam']:
+                data.append({
+                    'student_id': str(result['student']),
+                    'subject': result['exam']['subject'],
+                    'score': result['percentage']
+                })
         
+        if not data:
+            return None
+            
         df = pd.DataFrame(data)
         
         # Create pivot table
@@ -68,7 +73,7 @@ class CollaborativeFiltering:
         
         return self.user_item_matrix
     
-    def calculate_user_similarity(self):
+    def calculate_user_similarity(self) -> Optional[np.ndarray]:
         """Calculate user similarity matrix using cosine similarity"""
         if self.user_item_matrix is None:
             return None
@@ -76,7 +81,7 @@ class CollaborativeFiltering:
         self.user_similarity_matrix = cosine_similarity(self.user_item_matrix)
         return self.user_similarity_matrix
     
-    def calculate_item_similarity(self):
+    def calculate_item_similarity(self) -> Optional[np.ndarray]:
         """Calculate item similarity matrix using cosine similarity"""
         if self.user_item_matrix is None:
             return None
@@ -84,7 +89,7 @@ class CollaborativeFiltering:
         self.item_similarity_matrix = cosine_similarity(self.user_item_matrix.T)
         return self.item_similarity_matrix
     
-    def fit_nmf(self, n_components=10):
+    def fit_nmf(self, n_components: int = 10) -> Optional[NMF]:
         """Fit Non-negative Matrix Factorization model"""
         if self.user_item_matrix is None:
             return None
@@ -93,9 +98,11 @@ class CollaborativeFiltering:
         self.nmf_model.fit(self.user_item_matrix)
         return self.nmf_model
     
-    def get_user_recommendations(self, user_id, n_recommendations=5):
+    def get_user_recommendations(self, user_id: str, n_recommendations: int = 5) -> List[Dict[str, Any]]:
         """Get personalized recommendations for a user"""
-        if self.user_item_matrix is None or user_id not in self.user_item_matrix.index:
+        if (self.user_item_matrix is None or 
+            self.user_similarity_matrix is None or 
+            user_id not in self.user_item_matrix.index):
             return []
         
         # Get user's current scores
@@ -130,11 +137,11 @@ class CollaborativeFiltering:
 
 class FaceDetection:
     def __init__(self):
-        self.known_faces = {}
-        self.face_locations = []
-        self.face_encodings = []
+        self.known_faces: Dict[str, np.ndarray] = {}
+        self.face_locations: List[tuple] = []
+        self.face_encodings: List[np.ndarray] = []
         
-    def encode_face_from_base64(self, image_base64):
+    def encode_face_from_base64(self, image_base64: str) -> Optional[np.ndarray]:
         """Encode face from base64 image"""
         try:
             # Decode base64 image
@@ -156,7 +163,7 @@ class FaceDetection:
             logger.error(f"Face encoding error: {e}")
             return None
     
-    def detect_faces(self, image_base64):
+    def detect_faces(self, image_base64: str) -> Dict[str, Any]:
         """Detect faces in image and return detection results"""
         try:
             # Decode base64 image
@@ -181,7 +188,7 @@ class FaceDetection:
             logger.error(f"Face detection error: {e}")
             return {'faces_detected': 0, 'face_locations': [], 'confidence': False}
     
-    def verify_student_identity(self, student_image_base64, stored_face_encoding):
+    def verify_student_identity(self, student_image_base64: str, stored_face_encoding: np.ndarray) -> Dict[str, Any]:
         """Verify if the detected face matches the stored student face"""
         try:
             current_face_encoding = self.encode_face_from_base64(student_image_base64)
@@ -222,7 +229,7 @@ def health_check():
     })
 
 @app.route('/recommendations/<user_id>', methods=['GET'])
-def get_recommendations(user_id):
+def get_recommendations(user_id: str):
     """Get personalized recommendations for a user"""
     try:
         if db is None:
@@ -271,6 +278,9 @@ def detect_faces():
     """Detect faces in uploaded image"""
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
         image_base64 = data.get('image')
         
         if not image_base64:
@@ -292,7 +302,13 @@ def detect_faces():
 def verify_identity():
     """Verify student identity using face recognition"""
     try:
+        if db is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
         data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
         image_base64 = data.get('image')
         student_id = data.get('student_id')
         
@@ -323,7 +339,13 @@ def verify_identity():
 def register_face():
     """Register student face encoding"""
     try:
+        if db is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
         data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
         image_base64 = data.get('image')
         student_id = data.get('student_id')
         
