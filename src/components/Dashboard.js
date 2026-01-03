@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import {
   Container,
   Grid,
@@ -9,7 +8,6 @@ import {
   Box,
   Button,
   Chip,
-  LinearProgress,
   Avatar,
   List,
   ListItem,
@@ -18,86 +16,68 @@ import {
   Divider,
   Alert,
   CircularProgress,
-  Paper,
 } from '@mui/material';
 import {
   School,
-  Assessment,
-  TrendingUp,
-  Schedule,
   Person,
   PlayArrow,
-  History,
   Analytics,
+  Add,
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { examAPI, studentAPI, pythonAPI } from '../utils/api';
-import { getSubjectColor, getSubjectName, getGrade, formatDate } from '../utils/api';
+import { examAPI, studentAPI } from '../utils/api';
+import {
+  getSubjectColor,
+  getSubjectName,
+  getGrade,
+  formatDate,
+} from '../utils/api';
 
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+
   const [loading, setLoading] = useState(true);
-  const [examHistory, setExamHistory] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
   const [availableExams, setAvailableExams] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
 
   useEffect(() => {
-    loadDashboardData();
+    loadData();
   }, []);
 
-  const loadDashboardData = async () => {
+  /* ============================
+     POINT 9 – DATA CHANGE
+     ============================ */
+  const loadData = async () => {
     try {
       setLoading(true);
-      
-      // Load exam history
-      const historyResponse = await studentAPI.getExamHistory();
-      setExamHistory(historyResponse.data.examResults || []);
 
-      // Load analytics
-      const analyticsResponse = await studentAPI.getAnalytics();
-      setAnalytics(analyticsResponse.data);
+      const exams =
+        user.role === 'teacher'
+          ? await examAPI.getTeacherExams()
+          : await examAPI.getAllExamsWithStatus();
 
-      // Load available exams
-      const examsResponse = await examAPI.getAvailableExams();
-      setAvailableExams(examsResponse.data.exams || []);
+      setAvailableExams(exams.data.exams || []);
 
-      // Load recommendations from Python service
-      try {
-        const recResponse = await pythonAPI.getRecommendations(user._id);
-        setRecommendations(recResponse.data.recommendations || []);
-      } catch (error) {
-        console.log('Python service not available for recommendations');
+      if (user.role === 'student') {
+        const h = await studentAPI.getExamHistory();
+        const a = await studentAPI.getAnalytics();
+        setHistory(h.data.examResults || []);
+        setAnalytics(a.data);
       }
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
+    } catch (err) {
+      console.error('Dashboard load error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const getOverallGrade = () => {
-    if (!analytics?.overallStats?.averageScore) return { grade: 'N/A', color: '#757575' };
-    return getGrade(analytics.overallStats.averageScore);
-  };
-
-  const getRecentExams = () => {
-    return examHistory.slice(0, 5);
-  };
-
-  const getSubjectPerformance = () => {
-    if (!analytics?.subjectPerformance) return [];
-    return Object.entries(analytics.subjectPerformance).map(([subject, data]) => ({
-      subject,
-      ...data,
-    }));
-  };
-
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ mt: 4 }}>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+      <Container sx={{ mt: 4 }}>
+        <Box display="flex" justifyContent="center">
           <CircularProgress />
         </Box>
       </Container>
@@ -106,255 +86,191 @@ const Dashboard = () => {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
-      {/* Welcome Section */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          Welcome back, {user.firstName}! 👋
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Here's your performance overview and recent activity.
-        </Typography>
-      </Box>
+      <Typography variant="h4" gutterBottom>
+        Welcome back, {user.firstName}! 👋
+      </Typography>
 
-      <Grid container spacing={3}>
-        {/* Performance Overview */}
-        <Grid item xs={12} md={8}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Performance Overview
-              </Typography>
-              
-              {analytics ? (
-                <Grid container spacing={3}>
-                  <Grid item xs={12} sm={4}>
-                    <Box textAlign="center">
-                      <Typography variant="h3" color="primary" gutterBottom>
-                        {analytics.overallStats?.totalExams || 0}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Total Exams
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} sm={4}>
-                    <Box textAlign="center">
-                      <Typography variant="h3" color="secondary" gutterBottom>
-                        {analytics.overallStats?.averageScore?.toFixed(1) || 0}%
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Average Score
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} sm={4}>
-                    <Box textAlign="center">
-                      <Typography variant="h3" style={{ color: getOverallGrade().color }} gutterBottom>
-                        {getOverallGrade().grade}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Overall Grade
-                      </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-              ) : (
-                <Alert severity="info">
-                  No exam data available. Start taking exams to see your performance!
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
+      <Typography color="text.secondary" gutterBottom>
+        {user.role === 'teacher'
+          ? 'Manage and monitor exams'
+          : 'Track performance and take exams'}
+      </Typography>
 
-        {/* Quick Actions */}
+      <Grid container spacing={3} sx={{ mt: 2 }}>
+        {/* QUICK ACTIONS */}
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Quick Actions
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Button
-                  variant="contained"
-                  startIcon={<PlayArrow />}
-                  onClick={() => navigate('/exams')}
-                  fullWidth
-                >
-                  Take Exam
-                </Button>
+              <Typography variant="h6">Quick Actions</Typography>
+
+              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {user.role === 'student' && (
+                  <Button
+                    variant="contained"
+                    startIcon={<PlayArrow />}
+                    onClick={() => navigate('/exam')}
+                  >
+                    Take Exam
+                  </Button>
+                )}
+
+                {user.role === 'teacher' && (
+                  <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={() => navigate('/exam/create')}
+                  >
+                    Create Exam
+                  </Button>
+                )}
+
                 <Button
                   variant="outlined"
                   startIcon={<Analytics />}
                   onClick={() => navigate('/analytics')}
-                  fullWidth
                 >
-                  View Analytics
+                  Analytics
                 </Button>
+
                 <Button
                   variant="outlined"
                   startIcon={<Person />}
                   onClick={() => navigate('/profile')}
-                  fullWidth
                 >
-                  Update Profile
+                  Profile
                 </Button>
               </Box>
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Subject Performance */}
-        {analytics?.subjectPerformance && (
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Subject Performance
-                </Typography>
-                <Grid container spacing={2}>
-                  {getSubjectPerformance().map((subject) => (
-                    <Grid item xs={12} sm={6} md={4} key={subject.subject}>
-                      <Paper sx={{ p: 2, borderLeft: `4px solid ${getSubjectColor(subject.subject)}` }}>
-                        <Typography variant="subtitle1" gutterBottom>
-                          {getSubjectName(subject.subject)}
-                        </Typography>
-                        <Typography variant="h4" color="primary" gutterBottom>
-                          {subject.averageScore?.toFixed(1) || 0}%
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {subject.totalExams} exams taken
-                        </Typography>
-                        <LinearProgress
-                          variant="determinate"
-                          value={subject.averageScore || 0}
-                          sx={{ mt: 1 }}
-                        />
-                      </Paper>
-                    </Grid>
-                  ))}
-                </Grid>
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-
-        {/* Available Exams */}
-        {availableExams.length > 0 && (
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Available Exams
-                </Typography>
-                <List>
-                  {availableExams.slice(0, 3).map((exam, index) => (
-                    <React.Fragment key={exam._id}>
-                      <ListItem>
-                        <ListItemAvatar>
-                          <Avatar sx={{ bgcolor: getSubjectColor(exam.subject) }}>
-                            <School />
-                          </Avatar>
-                        </ListItemAvatar>
-                        <ListItemText
-                          primary={exam.title}
-                          secondary={`${getSubjectName(exam.subject)} • ${exam.duration} minutes`}
-                        />
-                        <Button
-                          variant="contained"
-                          size="small"
-                          onClick={() => navigate(`/exam/${exam._id}`)}
-                        >
-                          Start
-                        </Button>
-                      </ListItem>
-                      {index < availableExams.slice(0, 3).length - 1 && <Divider />}
-                    </React.Fragment>
-                  ))}
-                </List>
-                {availableExams.length > 3 && (
-                  <Box sx={{ mt: 2, textAlign: 'center' }}>
-                    <Button
-                      variant="outlined"
-                      onClick={() => navigate('/exams')}
-                    >
-                      View All ({availableExams.length})
-                    </Button>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-
-        {/* Recent Exams */}
-        <Grid item xs={12} md={6}>
+        {/* EXAMS LIST */}
+        <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Recent Exams
+              <Typography variant="h6">
+                {user.role === 'teacher' ? 'My Exams' : 'Available Exams'}
               </Typography>
-              {getRecentExams().length > 0 ? (
-                <List>
-                  {getRecentExams().map((result, index) => (
-                    <React.Fragment key={result._id}>
-                      <ListItem>
-                        <ListItemAvatar>
-                          <Avatar sx={{ bgcolor: getSubjectColor(result.exam.subject) }}>
-                            <Assessment />
-                          </Avatar>
-                        </ListItemAvatar>
-                        <ListItemText
-                          primary={result.exam.title}
-                          secondary={`${formatDate(result.createdAt)} • ${result.percentage.toFixed(1)}%`}
-                        />
-                        <Chip
-                          label={getGrade(result.percentage).grade}
-                          size="small"
-                          sx={{ bgcolor: getGrade(result.percentage).color, color: 'white' }}
-                        />
-                      </ListItem>
-                      {index < getRecentExams().length - 1 && <Divider />}
-                    </React.Fragment>
-                  ))}
-                </List>
-              ) : (
-                <Alert severity="info">
-                  No recent exams. Start taking exams to see your history!
+
+              {availableExams.length === 0 ? (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  No exams found
                 </Alert>
+              ) : (
+                <List>
+                  {availableExams.map((exam, i) => {
+                    const status = exam.status || 'draft';
+
+                    return (
+                      <React.Fragment key={exam._id}>
+                        <ListItem>
+                          <ListItemAvatar>
+                            <Avatar sx={{ bgcolor: getSubjectColor(exam.subject) }}>
+                              <School />
+                            </Avatar>
+                          </ListItemAvatar>
+
+                          <ListItemText
+                            primary={exam.title}
+                            secondary={
+                              user.role === 'teacher'
+                                ? `Status: ${status.toUpperCase()} | Duration: ${exam.duration} mins`
+                                : `${getSubjectName(exam.subject)} • ${exam.duration} mins`
+                            }
+                          />
+
+                          {user.role === 'teacher' && (
+                            <>
+                              <Chip
+                                label={status}
+                                color={
+                                  status === 'live'
+                                    ? 'success'
+                                    : status === 'upcoming'
+                                    ? 'warning'
+                                    : 'default'
+                                }
+                                sx={{ mr: 2 }}
+                              />
+
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                sx={{ mr: 1 }}
+                                onClick={() =>
+                                  navigate(`/exam/edit/${exam._id}`)
+                                }
+                              >
+                                Edit
+                              </Button>
+
+                              <Button
+                                size="small"
+                                color="error"
+                                variant="outlined"
+                                onClick={async () => {
+                                  if (window.confirm('Delete this exam?')) {
+                                    await examAPI.deleteExam(exam._id);
+                                    loadData();
+                                  }
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            </>
+                          )}
+
+                          {user.role === 'student' && (
+                            <Button
+                              variant="contained"
+                              disabled={status !== 'live'}
+                              onClick={() =>
+                                navigate(`/exam/${exam._id}`)
+                              }
+                            >
+                              {status === 'live' ? 'Start' : 'Not Live'}
+                            </Button>
+                          )}
+                        </ListItem>
+
+                        {i < availableExams.length - 1 && <Divider />}
+                      </React.Fragment>
+                    );
+                  })}
+                </List>
               )}
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Recommendations */}
-        {recommendations.length > 0 && (
+        {/* STUDENT RECENT EXAMS */}
+        {user.role === 'student' && (
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Personalized Recommendations
-                </Typography>
-                <Grid container spacing={2}>
-                  {recommendations.slice(0, 3).map((rec, index) => (
-                    <Grid item xs={12} sm={6} md={4} key={index}>
-                      <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                        <Typography variant="subtitle2" color="primary" gutterBottom>
-                          {rec.title}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {rec.description}
-                        </Typography>
-                        <Chip
-                          label={rec.priority}
-                          size="small"
-                          color={rec.priority === 'high' ? 'error' : rec.priority === 'medium' ? 'warning' : 'success'}
-                          sx={{ mt: 1 }}
+                <Typography variant="h6">Recent Exams</Typography>
+
+                {history.length === 0 ? (
+                  <Alert severity="info">No attempts yet</Alert>
+                ) : (
+                  <List>
+                    {history.map((res) => (
+                      <ListItem key={res._id}>
+                        <ListItemText
+                          primary={res.exam.title}
+                          secondary={`${formatDate(res.createdAt)} • ${res.percentage}%`}
                         />
-                      </Paper>
-                    </Grid>
-                  ))}
-                </Grid>
+                        <Chip
+                          label={getGrade(res.percentage).grade}
+                          sx={{
+                            bgcolor: getGrade(res.percentage).color,
+                            color: '#fff',
+                          }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
               </CardContent>
             </Card>
           </Grid>
@@ -364,4 +280,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

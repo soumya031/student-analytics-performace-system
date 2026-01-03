@@ -65,11 +65,12 @@ const Navbar = () => {
     setMobileOpen(false);
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => location.pathname.startsWith(path);
 
+  /* ===== FIX: use /exams (plural) ===== */
   const menuItems = [
     { text: 'Dashboard', path: '/dashboard', icon: <Dashboard /> },
-    { text: 'Exams', path: '/exams', icon: <School /> },
+    { text: 'Exams', path: '/exam', icon: <School /> },
     { text: 'Analytics', path: '/analytics', icon: <Assessment /> },
     { text: 'Profile', path: '/profile', icon: <Person /> },
   ];
@@ -82,7 +83,9 @@ const Navbar = () => {
           color="inherit"
           onClick={() => navigate(item.path)}
           sx={{
-            backgroundColor: isActive(item.path) ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            backgroundColor: isActive(item.path)
+              ? 'rgba(255, 255, 255, 0.1)'
+              : 'transparent',
             '&:hover': {
               backgroundColor: 'rgba(255, 255, 255, 0.1)',
             },
@@ -192,7 +195,12 @@ const Navbar = () => {
             horizontal: 'right',
           }}
         >
-          <MenuItem onClick={() => { handleMenuClose(); navigate('/profile'); }}>
+          <MenuItem
+            onClick={() => {
+              handleMenuClose();
+              navigate('/profile');
+            }}
+          >
             <Person sx={{ mr: 1 }} />
             Profile
           </MenuItem>
@@ -239,4 +247,4 @@ const Navbar = () => {
   );
 };
 
-export default Navbar; 
+export default Navbar;
