@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User';
@@ -17,7 +17,7 @@ router.post('/register', [
   body('department').optional().isIn(['Computer Science', 'Information Technology', 'Electronics', 'Mechanical', 'Civil']),
   body('year').optional().isInt({ min: 1, max: 4 }),
   body('semester').optional().isInt({ min: 1, max: 8 })
-], async (req, res) => {
+], async (req: Request, res: Response): Promise<any> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -58,12 +58,11 @@ router.post('/register', [
     // Generate JWT token
     const token = jwt.sign(
       { userId: user._id, role: user.role },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      process.env.JWT_SECRET || 'fallback-secret'
     );
 
     // Remove password from response
-    const userResponse = user.toObject();
+    const userResponse: any = user.toObject();
     delete userResponse.password;
 
     res.status(201).json({
@@ -81,7 +80,7 @@ router.post('/register', [
 router.post('/login', [
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty()
-], async (req, res) => {
+], async (req: Request, res: Response): Promise<any> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -114,12 +113,11 @@ router.post('/login', [
     // Generate JWT token
     const token = jwt.sign(
       { userId: user._id, role: user.role },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      process.env.JWT_SECRET || 'fallback-secret'
     );
 
     // Remove password from response
-    const userResponse = user.toObject();
+    const userResponse: any = user.toObject();
     delete userResponse.password;
 
     res.json({
@@ -134,7 +132,7 @@ router.post('/login', [
 });
 
 // Get current user profile
-router.get('/profile', authenticateToken, async (req: any, res) => {
+router.get('/profile', authenticateToken, async (req: any, res: Response): Promise<any> => {
   try {
     const user = await User.findById(req.user._id).select('-password');
     res.json({ user });
@@ -151,7 +149,7 @@ router.put('/profile', authenticateToken, [
   body('department').optional().isIn(['Computer Science', 'Information Technology', 'Electronics', 'Mechanical', 'Civil']),
   body('year').optional().isInt({ min: 1, max: 4 }),
   body('semester').optional().isInt({ min: 1, max: 8 })
-], async (req: any, res) => {
+], async (req: any, res: Response): Promise<any> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -184,7 +182,7 @@ router.put('/profile', authenticateToken, [
 router.put('/change-password', authenticateToken, [
   body('currentPassword').notEmpty(),
   body('newPassword').isLength({ min: 6 })
-], async (req: any, res) => {
+], async (req: any, res: Response): Promise<any> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
