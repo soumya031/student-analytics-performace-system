@@ -3,58 +3,150 @@
 ## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Flask Web Server                          │
-│                    (app.py - 813 lines)                      │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                   Express.js TypeScript Server                   │
+│                   (Node.js - Backend Services)                   │
+└─────────────────────────────────────────────────────────────────┘
               │
-              ├─────────────────────────────────────────┐
-              │                                         │
-    ┌─────────▼──────────┐            ┌────────────────▼────────┐
-    │  MongoDB Database  │            │  Frontend / API Clients │
-    │  ────────────────  │            │  ────────────────────   │
-    │ • examresults      │            │ • React Dashboard       │
-    │ • exams            │            │ • Mobile Apps           │
-    │ • users            │            │ • Third-party Services  │
-    └────────────────────┘            └────────────────────────┘
-              ▲
-              │ (Data retrieval & storage)
-              │
-    ┌─────────┴──────────────────────────────────────────────────┐
-    │                  Recommendation Engine                      │
-    └────────────────────────────────────────────────────────────┘
-              │
-    ┌─────────┼──────────────────────┬──────────────────────────┐
-    │         │                      │                          │
-    │         ▼                      ▼                          ▼
-    │    ┌─────────┐          ┌──────────┐          ┌──────────────┐
-    │    │Collabor.│          │Content   │          │Performance   │
-    │    │Filtering│          │Based     │          │Optimization  │
-    │    └─────────┘          │Filtering │          │Analyzer      │
-    │         │               └──────────┘          └──────────────┘
-    │         │                      │                      │
-    │    ┌────▼──────────┐      ┌────▼────────┐      ┌─────▼──────┐
-    │    │ User-Item     │      │ TF-IDF      │      │ Scoring    │
-    │    │ Matrix        │      │ Vectorizer  │      │ Functions  │
-    │    ├────────────── │      ├─────────────┤      ├────────────┤
-    │    │ Similarity    │      │ Item        │      │ S_time     │
-    │    │ Matrices      │      │ Similarity  │      │ S_space    │
-    │    │               │      │ Matrix      │      │ OS         │
-    │    └───────────────┘      └─────────────┘      └────────────┘
+    ┌─────────┼─────────────────────────────────────────┐
+    │         │                                         │
+    │         ├─────────────────────────────────┬────────┤
+    │         │                                 │        │
+    ▼         ▼                                 ▼        ▼
+┌──────────────────┐    ┌──────────────────┐  ┌────────────────┐  ┌─────────────────┐
+│  MongoDB         │    │  Frontend / API  │  │  Python        │  │  Recommendation │
+│  Database        │    │  Clients         │  │  Engine        │  │  Engine (Python)│
+│  ────────────── │    │  ────────────────│  │  ──────────────│  │  ────────────────│
+│ • User           │    │ • React Dashboard│  │ • Flask Server │  │ • Collaborative │
+│ • Exam           │    │ • Mobile Apps    │  │ • ML Models    │  │   Filtering     │
+│ • ExamResult     │    │ • Web Clients    │  │ • Predictions  │  │ • Content-Based │
+│ • TeacherRemark  │    └──────────────────┘  └────────────────┘  │ • Performance   │
+└──────────────────┘                                                │   Analysis      │
+    ▲                                                               └─────────────────┘
+    │ (Data retrieval & storage)
     │
-    └─────────────────────────────────────────────────────────────┘
-              │
-    ┌─────────▼──────────────────────────────────────────────────┐
-    │              Flask API Endpoints (7 total)                 │
-    ├────────────────────────────────────────────────────────────┤
-    │ ✓ /recommendations/{id}                                    │
-    │ ✓ /recommendations/{id}/similar-students                   │
-    │ ✓ /recommendations/{id}/hybrid                             │
-    │ ✓ /performance/analyze-submission                          │
-    │ ✓ /analytics/student-performance/{id}                      │
-    │ ✓ /analytics/performance-trends                            │
-    │ ✓ /health                                                  │
-    └────────────────────────────────────────────────────────────┘
+┌───┴────────────────────────────────────────────────────────────────────┐
+│                     Express Route Handlers                             │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────────┐ │
+│  │ Auth Routes      │  │ Admin Routes     │  │ Exam Routes        │ │
+│  │ ────────────────│  │ ────────────────│  │ ─────────────────  │ │
+│  │ • Register       │  │ • View Users     │  │ • Create Exam      │ │
+│  │ • Login          │  │ • View Profiles  │  │ • Edit Exam        │ │
+│  │ • Verify Token   │  │ • View Remarks   │  │ • Delete Exam      │ │
+│  │ • Refresh Token  │  │ • Manage Users   │  │ • List Exams       │ │
+│  └──────────────────┘  └──────────────────┘  └────────────────────┘ │
+│                                                                        │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────────┐ │
+│  │ Student Routes   │  │ Analytics Routes │  │ Middleware         │ │
+│  │ ────────────────│  │ ────────────────│  │ ─────────────────  │ │
+│  │ • Take Exam      │  │ • Performance    │  │ • Auth Middleware  │ │
+│  │ • View Results   │  │ • Trends         │  │ • Error Handler    │ │
+│  │ • Get Profile    │  │ • Insights       │  │ • Rate Limiting    │ │
+│  │ • View Remarks   │  │ • Reports        │  │ • CORS Handling    │ │
+│  └──────────────────┘  └──────────────────┘  └────────────────────┘ │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Data Flow Diagram
+
+### Authentication Flow
+```
+Client Request: POST /auth/login {email, password}
+    ↓
+Express Route Handler (auth.ts)
+    ↓
+Find User in MongoDB
+    ↓
+Compare Password (bcrypt)
+    ↓
+Generate JWT Token
+    ├─ Payload: {userId, email, role}
+    └─ Expiration: 1 hour
+    ↓
+Return: {token, user}
+    ├─ Token stored in client
+    └─ Used for subsequent requests
+```
+
+### Admin Profile Viewing Flow
+```
+Client Request: GET /admin/users/:userId (Admin only)
+    ↓
+Authenticate Token (Middleware)
+    ↓
+Verify Admin Role (requireAdmin Middleware)
+    ↓
+Query User Collection
+    ↓
+IF user.role === 'student':
+    ├─ Query ExamResult collection
+    ├─ Query TeacherRemark collection
+    └─ Populate teacher references
+    ↓
+IF user.role === 'teacher':
+    ├─ Query exams created
+    └─ Query remarks submitted
+    ↓
+Return: {user, examResults, remarks}
+```
+
+### Exam Submission Flow
+```
+Client Request: POST /student/exam/:examId/submit {answers}
+    ↓
+Authenticate Token
+    ↓
+Query Exam Collection
+    ↓
+Validate Exam Status (started, not ended)
+    ↓
+Grade Submission
+    ├─ Calculate score
+    └─ Calculate percentage
+    ↓
+Create ExamResult Document
+    ├─ student: userId
+    ├─ exam: examId
+    ├─ score: calculated
+    └─ percentage: calculated
+    ↓
+Save to MongoDB
+    ↓
+Call Python Recommendation Engine
+    ├─ POST to Flask server
+    ├─ Send exam results
+    └─ Receive recommendations
+    ↓
+Return: {result, recommendations}
+```
+
+### Analytics & Recommendations Flow
+```
+Client Request: GET /analytics/performance (Authenticated)
+    ↓
+Extract userId from JWT Token
+    ↓
+Query ExamResult collection (filter by student)
+    ↓
+Call Python Engine: GET /recommendations/{studentId}
+    ├─ Flask processes data
+    ├─ Applies ML algorithms
+    └─ Returns predictions
+    ↓
+Query TeacherRemark collection
+    ↓
+Aggregate performance data
+    ├─ Average score
+    ├─ Subject-wise performance
+    ├─ Trends over time
+    └─ Recommendations
+    ↓
+Return: {performance, trends, recommendations, remarks}
 ```
 
 ---
@@ -129,58 +221,112 @@ Return: {time_score, space_score, optimality_score, ...}
 
 ## Class Architecture
 
+### Express App & Models
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                   Flask App Instance                           │
+│                   Express App Instance                         │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  ┌─ cf_system ──────────────────────────────────────────┐     │
-│  │ CollaborativeFiltering()                             │     │
-│  │ ├─ user_item_matrix: DataFrame                       │     │
-│  │ ├─ user_similarity_matrix: np.ndarray               │     │
-│  │ ├─ user_similarity_df: DataFrame                    │     │
-│  │ ├─ item_similarity_matrix: np.ndarray              │     │
-│  │ ├─ nmf_model: NMF                                   │     │
-│  │ └─ Methods:                                         │     │
-│  │    ├─ create_user_item_matrix()                     │     │
-│  │    ├─ calculate_user_similarity()                   │     │
-│  │    ├─ calculate_item_similarity()                   │     │
-│  │    ├─ fit_nmf()                                     │     │
-│  │    ├─ get_user_recommendations()                    │     │
-│  │    └─ get_similar_students()                        │     │
-│  └─────────────────────────────────────────────────────┘     │
+│  ┌─ Models (Mongoose Schemas) ───────────────────────────────┐ │
+│  │                                                             │ │
+│  │  User (models/User.ts)                                     │ │
+│  │  ├─ email: string (unique)                                │ │
+│  │  ├─ password: string (hashed with bcrypt)                 │ │
+│  │  ├─ firstName: string                                     │ │
+│  │  ├─ lastName: string                                      │ │
+│  │  ├─ role: enum (student, teacher, admin)                  │ │
+│  │  ├─ faceEncoding: [float] (optional for biometric auth)   │ │
+│  │  └─ Methods: validatePassword(), generateToken()          │ │
+│  │                                                             │ │
+│  │  Exam (models/Exam.ts)                                     │ │
+│  │  ├─ title: string                                          │ │
+│  │  ├─ subject: string                                        │ │
+│  │  ├─ description: string                                    │ │
+│  │  ├─ startTime: datetime                                    │ │
+│  │  ├─ endTime: datetime                                      │ │
+│  │  ├─ duration: number                                       │ │
+│  │  ├─ createdBy: ref(User)                                   │ │
+│  │  └─ Methods: isActive(), canStartExam()                    │ │
+│  │                                                             │ │
+│  │  ExamResult (models/ExamResult.ts)                         │ │
+│  │  ├─ student: ref(User)                                     │ │
+│  │  ├─ exam: ref(Exam)                                        │ │
+│  │  ├─ score: number                                          │ │
+│  │  ├─ percentage: float                                      │ │
+│  │  ├─ submittedAt: datetime                                  │ │
+│  │  ├─ answers: [Object]                                      │ │
+│  │  └─ Methods: calculatePercentage()                         │ │
+│  │                                                             │ │
+│  │  TeacherRemark (models/TeacherRemark.ts)                   │ │
+│  │  ├─ student: ref(User)                                     │ │
+│  │  ├─ teacher: ref(User)                                     │ │
+│  │  ├─ subject: string                                        │ │
+│  │  ├─ remark: string                                         │ │
+│  │  ├─ rating: number (1-5)                                   │ │
+│  │  └─ Methods: validate()                                    │ │
+│  │                                                             │ │
+│  └─────────────────────────────────────────────────────────┘  │
 │                                                                 │
-│  ┌─ cb_system ──────────────────────────────────────────┐     │
-│  │ ContentBasedFiltering()                              │     │
-│  │ ├─ tfidf_vectorizer: TfidfVectorizer                │     │
-│  │ ├─ tfidf_matrix: np.ndarray                         │     │
-│  │ ├─ item_similarity_df: DataFrame                    │     │
-│  │ ├─ item_metadata_df: DataFrame                      │     │
-│  │ └─ Methods:                                         │     │
-│  │    ├─ prepare_items()                               │     │
-│  │    ├─ calculate_item_similarities()                 │     │
-│  │    └─ get_content_based_recommendations()           │     │
-│  └─────────────────────────────────────────────────────┘     │
+│  ┌─ Route Handlers ───────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │  Auth Routes (routes/auth.ts)                          │   │
+│  │  ├─ POST /auth/register                               │   │
+│  │  ├─ POST /auth/login                                  │   │
+│  │  └─ POST /auth/refresh-token                          │   │
+│  │                                                         │   │
+│  │  Admin Routes (routes/admin.ts)                        │   │
+│  │  ├─ GET /admin/users                                  │   │
+│  │  ├─ GET /admin/users/:userId                          │   │
+│  │  └─ DELETE /admin/users/:userId                       │   │
+│  │                                                         │   │
+│  │  Exam Routes (routes/exam.ts)                          │   │
+│  │  ├─ POST /exam/create                                 │   │
+│  │  ├─ GET /exam/:examId                                 │   │
+│  │  ├─ PUT /exam/:examId                                 │   │
+│  │  └─ DELETE /exam/:examId                              │   │
+│  │                                                         │   │
+│  │  Student Routes (routes/student.ts)                    │   │
+│  │  ├─ GET /student/profile                              │   │
+│  │  ├─ GET /student/results                              │   │
+│  │  ├─ POST /student/exam/:examId/submit                 │   │
+│  │  └─ GET /student/remarks                              │   │
+│  │                                                         │   │
+│  │  Analytics Routes (routes/analytics.ts)                │   │
+│  │  ├─ GET /analytics/performance                         │   │
+│  │  ├─ GET /analytics/trends                             │   │
+│  │  └─ POST /analytics/recommendations                    │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘  │
 │                                                                 │
-│  ┌─ perf_analyzer ───────────────────────────────────┐         │
-│  │ PerformanceOptimizationAnalyzer()                 │         │
-│  │ └─ Methods (all static):                          │         │
-│  │    ├─ calculate_s_time()                          │         │
-│  │    ├─ calculate_s_space()                         │         │
-│  │    ├─ calculate_overall_score()                   │         │
-│  │    └─ analyze_submission()                        │         │
-│  └─────────────────────────────────────────────────────┘     │
+│  ┌─ Middleware ───────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │  authenticateToken (middleware/auth.ts)                │   │
+│  │  ├─ Verify JWT token                                  │   │
+│  │  ├─ Extract user info                                 │   │
+│  │  └─ Attach to request context                         │   │
+│  │                                                         │   │
+│  │  errorHandler (middleware/errorHandler.ts)             │   │
+│  │  ├─ Catch all errors                                  │   │
+│  │  ├─ Format error responses                            │   │
+│  │  └─ Log errors                                        │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘  │
 │                                                                 │
-│  ┌─ face_system ─────────────────────────────────────┐         │
-│  │ FaceDetection()                                   │         │
-│  │ ├─ known_faces: Dict                              │         │
-│  │ ├─ face_locations: List                           │         │
-│  │ ├─ face_encodings: List                           │         │
-│  │ └─ Methods:                                       │         │
-│  │    ├─ encode_face_from_base64()                   │         │
-│  │    ├─ detect_faces()                              │         │
-│  │    └─ verify_student_identity()                   │         │
-│  └─────────────────────────────────────────────────────┘     │
+│  ┌─ Third-party Services ────────────────────────────────┐    │
+│  │                                                         │    │
+│  │  Python Recommendation Engine                          │    │
+│  │  ├─ Collaborative Filtering                            │    │
+│  │  ├─ Content-Based Filtering                            │    │
+│  │  ├─ Performance Analysis                               │    │
+│  │  └─ HTTP API Interface                                 │    │
+│  │                                                         │    │
+│  │  MongoDB                                               │    │
+│  │  ├─ User Authentication                                │    │
+│  │  ├─ Exam Management                                    │    │
+│  │  ├─ Result Storage                                     │    │
+│  │  └─ Remark Management                                  │    │
+│  │                                                         │    │
+│  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -190,37 +336,57 @@ Return: {time_score, space_score, optimality_score, ...}
 ## Technology Stack
 
 ```
-Frontend Layer (Optional)
+Frontend Layer
       ↓
-Flask 2.x (Web Framework)
+Express.js (TypeScript - Web Framework)
       ↓
-├─ Flask-CORS (Cross-Origin Support)
-├─ JSONify (Response Formatting)
-└─ Request Handler (Input Processing)
+├─ Express Core (Routing, Middleware)
+├─ CORS (Cross-Origin Support)
+├─ Helmet (Security Headers)
+├─ Morgan (Logging)
+├─ Compression (Response Compression)
+├─ Rate Limiting (DoS Protection)
+├─ Socket.IO (Real-time Communication)
+└─ Express-Validator (Input Validation)
       ↓
-Machine Learning Layer
-├─ scikit-learn
-│  ├─ cosine_similarity (CF)
-│  ├─ NMF (Non-negative Matrix Factorization)
-│  ├─ TfidfVectorizer (CB)
-│  └─ metrics.pairwise
-│
-├─ NumPy (Numerical computations)
-├─ Pandas (Data manipulation)
-└─ face_recognition (Identity verification)
+Authentication & Authorization Layer
+├─ JWT (Token-based authentication)
+├─ Password Hashing (bcrypt)
+├─ Role-based Access Control (RBAC)
+│  ├─ Student
+│  ├─ Teacher
+│  └─ Admin
+└─ Middleware (auth, requireAdmin)
+      ↓
+Route Handlers Layer
+├─ Auth Routes (Registration, Login, Token Refresh)
+├─ Admin Routes (User Management, Profile Views)
+├─ Exam Routes (CRUD operations)
+├─ Student Routes (Exam Taking, Results)
+└─ Analytics Routes (Performance Insights)
       ↓
 Data Layer
-├─ MongoDB (NoSQL database)
-├─ PyMongo (Python driver)
-└─ Collections: exams, examresults, users
+├─ Mongoose (MongoDB ODM)
+├─ Models:
+│  ├─ User (Authentication, Profile)
+│  ├─ Exam (Exam Configuration)
+│  ├─ ExamResult (Student Submissions)
+│  └─ TeacherRemark (Teacher Feedback)
+└─ MongoDB (NoSQL database)
       ↓
-Utilities
-├─ OpenCV (Image processing)
-├─ PIL (Image library)
-├─ base64 (Encoding/Decoding)
-├─ psutil (System metrics)
-├─ dotenv (Configuration)
-└─ logging (Error tracking)
+Python Integration Layer
+├─ Flask Server (Recommendation Engine)
+├─ scikit-learn (ML Algorithms)
+├─ NumPy & Pandas (Data Processing)
+├─ face_recognition (Identity Verification)
+└─ API Communication (HTTP/JSON)
+      ↓
+Utilities & Infrastructure
+├─ Dotenv (Configuration Management)
+├─ Logging (Error & Activity Tracking)
+├─ TypeScript (Type Safety)
+├─ Node.js Runtime
+└─ npm/yarn (Package Management)
 ```
 
 ---
@@ -292,38 +458,88 @@ Utilities
 
 ## Integration Points
 
-### Input: MongoDB
+### Input: MongoDB Collections
 ```
-examresults
-├─ student: ObjectId
-├─ exam: ObjectId
-├─ percentage: float
+User
+├─ _id: ObjectId
+├─ email: string (unique)
+├─ password: string (hashed)
+├─ firstName: string
+├─ lastName: string
+├─ role: string (student/teacher/admin)
+├─ faceEncoding: [float] (optional)
 └─ createdAt: datetime
 
-exams
+Exam
 ├─ _id: ObjectId
+├─ title: string
 ├─ subject: string
-└─ description: string (optional)
+├─ description: string
+├─ startTime: datetime
+├─ endTime: datetime
+├─ createdBy: ObjectId (teacher)
+└─ duration: number
 
-users
-├─ studentId: string
-├─ faceEncoding: [float] (optional)
-└─ ...
+ExamResult
+├─ _id: ObjectId
+├─ student: ObjectId (ref: User)
+├─ exam: ObjectId (ref: Exam)
+├─ score: number
+├─ percentage: float
+├─ submittedAt: datetime
+└─ answers: [Object]
+
+TeacherRemark
+├─ _id: ObjectId
+├─ student: ObjectId (ref: User)
+├─ teacher: ObjectId (ref: User)
+├─ subject: string
+├─ remark: string
+├─ rating: number
+└─ createdAt: datetime
 ```
 
-### Output: JSON API
+### Output: JSON API Responses
 ```
+Success Response:
+{
+  "success": true,
+  "data": {
+    // Resource-specific data
+  },
+  "message": "Operation successful"
+}
+
+Error Response:
+{
+  "success": false,
+  "error": "Error message",
+  "statusCode": 400
+}
+
+Authentication Response:
+{
+  "success": true,
+  "token": "JWT_TOKEN",
+  "user": {
+    "id": "...",
+    "email": "...",
+    "role": "..."
+  }
+}
+
 Recommendations:
-├─ subject: string
-├─ score: float
-├─ type: string (collaborative/content_based/hybrid)
-└─ additional_metrics: {...}
-
-Performance Analysis:
-├─ time_score: float [0-1]
-├─ space_score: float [0-1]
-├─ optimality_score: float [0-1]
-└─ metrics: {...}
+{
+  "success": true,
+  "data": [
+    {
+      "subject": "string",
+      "score": "number",
+      "type": "collaborative|content_based|hybrid",
+      "reason": "string"
+    }
+  ]
+}
 ```
 
 ---
@@ -367,6 +583,6 @@ Planned (v3.0)
 
 ---
 
-**Architecture Version**: 1.0.0  
-**Last Updated**: February 12, 2026  
-**Status**: Production Ready
+**Architecture Version**: 2.0.0  
+**Last Updated**: February 13, 2026  
+**Status**: TypeScript Express Backend Integration Complete
