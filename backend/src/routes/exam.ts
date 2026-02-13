@@ -6,6 +6,25 @@ import { requireStudent, requireTeacher } from '../middleware/auth';
 
 const router = express.Router();
 
+function validateStudentIdScope(req: any, res: any) {
+  const requestedStudentId = req.query?.studentId || req.body?.studentId;
+  if (!requestedStudentId) {
+    return true;
+  }
+
+  if (!req.user?.studentId) {
+    res.status(403).json({ message: 'Student ID is not available for this account' });
+    return false;
+  }
+
+  if (req.user.studentId !== requestedStudentId) {
+    res.status(403).json({ message: 'Student ID does not match authenticated student' });
+    return false;
+  }
+
+  return true;
+}
+
 /* =========================================================
    JUDGE0 LANGUAGE MAP
 ========================================================= */
@@ -174,6 +193,8 @@ router.delete('/teacher/:examId', requireTeacher, async (req: any, res) => {
  */
 router.get('/available', requireStudent, async (req, res) => {
   try {
+    if (!validateStudentIdScope(req, res)) return;
+
     const now = new Date();
 
     const exams = await Exam.find({
@@ -189,59 +210,38 @@ router.get('/available', requireStudent, async (req, res) => {
 });
 
 /**
- * GET EXAM FOR STUDENT (ONLY IF LIVE & NOT ATTEMPTED)
+ * GET ALL EXAMS WITH STATUS (STUDENT)
  */
-router.get('/:examId', requireStudent, async (req: any, res) => {
-  const exam = await Exam.findById(req.params.examId);
-  if (!exam) return res.status(404).json({ message: 'Exam not found' });
+router.get('/all-status', requireStudent, async (req: any, res) => {
+  if (!validateStudentIdScope(req, res)) return;
 
   const now = new Date();
-  if (now < exam.startTime || now > exam.endTime) {
-    return res.status(403).json({ message: 'Exam not live' });
-  }
 
-  const attempted = await ExamResult.findOne({
-    student: req.user._id,
-    exam: exam._id
+  const exams = await Exam.find({ isActive: true })
+    .select('-sections.questions.correctAnswer -sections.questions.testCases')
+    .sort({ startTime: 1 });
+
+  const examsWithStatus = exams.map((exam) => {
+    let status: 'upcoming' | 'live' | 'expired' = 'upcoming';
+
+    if (now >= exam.startTime && now <= exam.endTime) status = 'live';
+    if (now > exam.endTime) status = 'expired';
+
+    return {
+      ...exam.toObject(),
+      status,
+    };
   });
 
-  if (attempted) {
-    return res.status(400).json({ message: 'Already attempted' });
-  }
-
-  const safeExam = {
-    ...exam.toObject(),
-    sections: exam.sections.map(sec => ({
-      sectionType: sec.sectionType,
-      title: sec.title,
-      instructions: sec.instructions,
-      order: sec.order,
-      questions: sec.questions.map(q =>
-        q.questionType === 'mcq'
-          ? {
-              questionType: 'mcq',
-              question: q.question,
-              options: q.options,
-              points: q.points
-            }
-          : {
-              questionType: 'coding',
-              question: q.question,
-              starterCode: q.starterCode,
-              language: q.language,
-              points: q.points
-            }
-      )
-    }))
-  };
-
-  res.json({ exam: safeExam });
+  res.json({ exams: examsWithStatus });
 });
 
 /**
  * START EXAM
  */
 router.post('/:examId/start', requireStudent, async (req: any, res) => {
+  if (!validateStudentIdScope(req, res)) return;
+
   const exam = await Exam.findById(req.params.examId);
   if (!exam) return res.status(404).json({ message: 'Exam not found' });
 
@@ -274,6 +274,8 @@ router.post('/:examId/compile', requireStudent, async (req, res) => {
  * SUBMIT EXAM
  */
 router.post('/:examId/submit', requireStudent, async (req: any, res) => {
+  if (!validateStudentIdScope(req, res)) return;
+
   const { mcqAnswers = [], codingAnswers = [], timeTaken } = req.body;
 
   const exam = await Exam.findById(req.params.examId);
@@ -340,28 +342,55 @@ router.post('/:examId/submit', requireStudent, async (req: any, res) => {
 });
 
 /**
- * GET ALL EXAMS WITH STATUS (STUDENT)
+ * GET EXAM FOR STUDENT (ONLY IF LIVE & NOT ATTEMPTED)
  */
-router.get('/all-status', requireStudent, async (req: any, res) => {
+router.get('/:examId', requireStudent, async (req: any, res) => {
+  if (!validateStudentIdScope(req, res)) return;
+
+  const exam = await Exam.findById(req.params.examId);
+  if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
   const now = new Date();
+  if (now < exam.startTime || now > exam.endTime) {
+    return res.status(403).json({ message: 'Exam not live' });
+  }
 
-  const exams = await Exam.find({ isActive: true })
-    .select('-sections.questions.correctAnswer -sections.questions.testCases')
-    .sort({ startTime: 1 });
-
-  const examsWithStatus = exams.map((exam) => {
-    let status: 'upcoming' | 'live' | 'expired' = 'upcoming';
-
-    if (now >= exam.startTime && now <= exam.endTime) status = 'live';
-    if (now > exam.endTime) status = 'expired';
-
-    return {
-      ...exam.toObject(),
-      status,
-    };
+  const attempted = await ExamResult.findOne({
+    student: req.user._id,
+    exam: exam._id
   });
 
-  res.json({ exams: examsWithStatus });
+  if (attempted) {
+    return res.status(400).json({ message: 'Already attempted' });
+  }
+
+  const safeExam = {
+    ...exam.toObject(),
+    sections: exam.sections.map(sec => ({
+      sectionType: sec.sectionType,
+      title: sec.title,
+      instructions: sec.instructions,
+      order: sec.order,
+      questions: sec.questions.map(q =>
+        q.questionType === 'mcq'
+          ? {
+              questionType: 'mcq',
+              question: q.question,
+              options: q.options,
+              points: q.points
+            }
+          : {
+              questionType: 'coding',
+              question: q.question,
+              starterCode: q.starterCode,
+              language: q.language,
+              points: q.points
+            }
+      )
+    }))
+  };
+
+  res.json({ exam: safeExam });
 });
 
 export default router;

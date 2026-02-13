@@ -51,6 +51,18 @@ export const examAPI = {
 export const studentAPI = {
   getExamHistory: () => backendApi.get('/student/history'),
   getAnalytics: () => backendApi.get('/student/analytics'),
+  getExamHistoryByStudentId: (studentId) =>
+    backendApi.get(`/student/history/${studentId}`),
+  getAnalyticsByStudentId: (studentId) =>
+    backendApi.get(`/student/analytics/${studentId}`),
+  getRemarks: (studentId) => backendApi.get(`/student/remarks/${studentId}`),
+  addRemark: (studentId, remark) =>
+    backendApi.post(`/student/remarks/${studentId}`, { remark }),
+};
+
+export const adminAPI = {
+  getUsers: (role) => backendApi.get('/admin/users', { params: role ? { role } : {} }),
+  getUserDetails: (userId) => backendApi.get(`/admin/users/${userId}`),
 };
 
 /* -------------------- HELPERS -------------------- */

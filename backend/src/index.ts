@@ -13,6 +13,7 @@ import authRoutes from './routes/auth';
 import examRoutes from './routes/exam';
 import studentRoutes from './routes/student';
 import analyticsRoutes from './routes/analytics';
+import adminRoutes from './routes/admin';
 import { authenticateToken } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -94,6 +95,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/exam', authenticateToken, examRoutes);
 app.use('/api/student', authenticateToken, studentRoutes);
 app.use('/api/analytics', authenticateToken, analyticsRoutes);
+app.use('/api/admin', authenticateToken, adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
