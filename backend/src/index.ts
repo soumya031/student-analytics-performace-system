@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { corsMiddleware } from './middleware/cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
@@ -36,10 +37,8 @@ app.use(helmet());
 // global rate limiter (can also be applied per-route)
 app.use(apiRateLimiter);
 
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-  credentials: true
-}));
+// CORS handling
+app.use(corsMiddleware);
 app.use(compression());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
