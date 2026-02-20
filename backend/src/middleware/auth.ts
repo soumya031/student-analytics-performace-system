@@ -6,7 +6,7 @@ interface AuthRequest extends Request {
   user?: any;
 }
 
-export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction): Promise<Response | void> => {
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -39,8 +39,8 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 };
 
-export const requireRole = (roles: string[]) => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireRole = (roles: string[]): (req: AuthRequest, res: Response, next: NextFunction) => Response | void => {
+  return (req: AuthRequest, res: Response, next: NextFunction): Response | void => {
     if (!req.user) {
       return res.status(401).json({ message: 'Authentication required' });
     }
