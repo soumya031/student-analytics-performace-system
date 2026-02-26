@@ -77,3 +77,7 @@ yarn-error.log*
 *.pem
 *.key
 *.crt
+# =========================
+# PICKLE FILE 
+# =========================
+python-recommendation/hybrid_recommender.pkl

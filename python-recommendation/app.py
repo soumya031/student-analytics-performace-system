@@ -20,8 +20,37 @@ from typing import Optional, List, Dict, Any
 import time
 import psutil
 import math
+import pickle
+import os
+
+# LOAD PKL MODEL
+MODEL_PATH = os.path.join(os.getcwd(), "hybrid_recommender.pkl")
+
+print("Loading hybrid recommender model (pickle)...")
+
+with open(MODEL_PATH, "rb") as f:
+    recommender_bundle = pickle.load(f)
+
+print("Hybrid recommender loaded successfully.")
+
+#EXTRACT COMPONENTS
+
+solutions_df = recommender_bundle["solutions_df"]
+user_ratings_df = recommender_bundle["user_ratings_df"]
+solution_similarity_df_conceptual = recommender_bundle["solution_similarity_df_conceptual"]
+user_similarity_df_conceptual = recommender_bundle["user_similarity_df_conceptual"]
+
+params = recommender_bundle["params"]
+
+T_opt = params["T_opt"]
+M_opt = params["M_opt"]
+alpha = params["alpha"]
+beta = params["beta"]
+W_time = params["W_time"]
+W_space = params["W_space"]
 
 # Load environment variables
+
 load_dotenv()
 
 app = Flask(__name__)
