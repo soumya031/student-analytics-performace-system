@@ -56,6 +56,25 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+# ROOT ROUTE
+
+@app.route("/", methods=["GET"])
+def root():
+    try:
+        return {
+            "status": "running",
+            "message": "Student Performance Hybrid Recommender API",
+            "model_loaded": True,
+            "available_keys": list(recommender_bundle.keys()),
+            "total_solutions": len(solutions_df),
+            "total_user_ratings": len(user_ratings_df)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }, 500
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
