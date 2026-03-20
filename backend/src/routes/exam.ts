@@ -138,6 +138,19 @@ router.get('/teacher/all', requireTeacher, async (req: any, res) => {
   res.json({ exams: examsWithStatus });
 });
 
+router.get('/teacher/:examId', requireTeacher, async (req: any, res) => {
+  const exam = await Exam.findOne({
+    _id: req.params.examId,
+    createdBy: req.user._id
+  });
+
+  if (!exam) {
+    return res.status(404).json({ message: 'Exam not found' });
+  }
+
+  res.json({ exam });
+});
+
 
 /**
  * CREATE EXAM
@@ -336,9 +349,24 @@ router.post('/:examId/submit', requireStudent, async (req: any, res) => {
 
   res.json({
     message: 'Exam submitted successfully',
+    examResultId: examResult._id,
     score: examResult.score,
     percentage: examResult.percentage
   });
+});
+
+router.get('/:examId/result', requireStudent, async (req: any, res) => {
+  const examResult = await ExamResult.findOne({
+    exam: req.params.examId,
+    student: req.user._id,
+    isCompleted: true
+  }).populate('exam');
+
+  if (!examResult) {
+    return res.status(404).json({ message: 'Exam result not found' });
+  }
+
+  res.json({ examResult });
 });
 
 /**

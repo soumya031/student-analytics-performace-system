@@ -16,6 +16,7 @@ import ExamList from './components/exam/ExamList';
 import ExamTaking from './components/exam/ExamTaking';
 import CreateExam from './components/exam/CreateExam';
 import EditExam from './components/exam/EditExam';
+import Results from './components/exam/Results';
 import Profile from './components/Profile';
 import Analytics from './components/Analytics';
 
@@ -71,6 +72,7 @@ function App() {
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/exam" element={<ProtectedRoute><ExamList /></ProtectedRoute>} />
               <Route path="/exam/:examId" element={<ProtectedRoute><ExamTaking /></ProtectedRoute>} />
+              <Route path="/exam/:examId/result" element={<ProtectedRoute><Results /></ProtectedRoute>} />
 
               {/* TEACHER */}
               <Route path="/exam/create" element={<TeacherRoute><CreateExam /></TeacherRoute>} />

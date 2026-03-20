@@ -37,11 +37,14 @@ export const examAPI = {
   // Student only
   getExam: (examId) => backendApi.get(`/exam/${examId}`),
   startExam: (examId) => backendApi.post(`/exam/${examId}/start`),
+  compileExam: (examId, data) => backendApi.post(`/exam/${examId}/compile`, data),
   submitExam: (examId, data) =>
     backendApi.post(`/exam/${examId}/submit`, data),
+  getExamResult: (examId) => backendApi.get(`/exam/${examId}/result`),
 
   // Teacher only
   getTeacherExams: () => backendApi.get('/exam/teacher/all'),
+  getTeacherExam: (id) => backendApi.get(`/exam/teacher/${id}`),
   createExam: (data) => backendApi.post('/exam/teacher/create', data),
   updateExam: (id, data) => backendApi.put(`/exam/teacher/${id}`, data),
   deleteExam: (id) => backendApi.delete(`/exam/teacher/${id}`),

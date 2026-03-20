@@ -34,6 +34,85 @@ const emptyCoding = () => ({
   testCases: [{ input: '', expectedOutput: '' }],
 });
 
+const syncSectionQuestions = (existingQuestions = [], count, createQuestion) =>
+  Array.from({ length: count }, (_, index) => existingQuestions[index] || createQuestion());
+
+const buildSectionsFromCounts = (existingSections, mcqCount, codingCount) => {
+  const nextSections = [];
+  const existingMcqSection = existingSections.find((section) => section.sectionType === 'mcq');
+  const existingCodingSection = existingSections.find((section) => section.sectionType === 'coding');
+
+  if (mcqCount > 0) {
+    nextSections.push({
+      sectionType: 'mcq',
+      title: 'MCQ Section',
+      instructions: 'Choose the correct option',
+      order: 1,
+      questions: syncSectionQuestions(existingMcqSection?.questions, mcqCount, emptyMCQ),
+    });
+  }
+
+  if (codingCount > 0) {
+    nextSections.push({
+      sectionType: 'coding',
+      title: 'Coding Section',
+      instructions: 'Write correct code for all test cases',
+      order: nextSections.length + 1,
+      questions: syncSectionQuestions(
+        existingCodingSection?.questions,
+        codingCount,
+        emptyCoding
+      ),
+    });
+  }
+
+  return nextSections;
+};
+
+const validateSections = (sections) => {
+  for (const section of sections) {
+    for (let qIdx = 0; qIdx < section.questions.length; qIdx += 1) {
+      const question = section.questions[qIdx];
+      const questionNumber = qIdx + 1;
+
+      if (!question.question.trim()) {
+        return `${section.title}: Question ${questionNumber} cannot be empty`;
+      }
+
+      if (!Number(question.points) || Number(question.points) < 1) {
+        return `${section.title}: Question ${questionNumber} must have at least 1 point`;
+      }
+
+      if (question.questionType === 'mcq') {
+        if (question.options.some((option) => !option.trim())) {
+          return `${section.title}: All options are required for question ${questionNumber}`;
+        }
+      }
+
+      if (question.questionType === 'coding') {
+        if (!question.language?.trim()) {
+          return `${section.title}: Question ${questionNumber} needs a language`;
+        }
+
+        if (!question.testCases?.length) {
+          return `${section.title}: Question ${questionNumber} needs at least one test case`;
+        }
+
+        if (
+          question.testCases.some(
+            (testCase) =>
+              !testCase.input.trim() || !testCase.expectedOutput.trim()
+          )
+        ) {
+          return `${section.title}: Complete every test case for question ${questionNumber}`;
+        }
+      }
+    }
+  }
+
+  return '';
+};
+
 const CreateExam = () => {
   const navigate = useNavigate();
 
@@ -55,57 +134,119 @@ const CreateExam = () => {
 
   /* ---------- HELPERS ---------- */
 
-  const buildSections = () => {
-    const sections = [];
+  const updateSections = (updater) => {
+    setExam((prevExam) => ({
+      ...prevExam,
+      sections:
+        typeof updater === 'function' ? updater(prevExam.sections) : updater,
+    }));
+  };
 
-    if (mcqCount > 0) {
-      sections.push({
-        sectionType: 'mcq',
-        title: 'MCQ Section',
-        instructions: 'Choose the correct option',
-        order: 1,
-        questions: Array.from({ length: mcqCount }, emptyMCQ),
-      });
+  const handleQuestionCountChange = (type, value) => {
+    const parsedValue = Math.max(0, Number(value) || 0);
+    const nextMcqCount = type === 'mcq' ? parsedValue : mcqCount;
+    const nextCodingCount = type === 'coding' ? parsedValue : codingCount;
+
+    if (type === 'mcq') {
+      setMcqCount(parsedValue);
+    } else {
+      setCodingCount(parsedValue);
     }
 
-    if (codingCount > 0) {
-      sections.push({
-        sectionType: 'coding',
-        title: 'Coding Section',
-        instructions: 'Write correct code for all test cases',
-        order: sections.length + 1,
-        questions: Array.from({ length: codingCount }, emptyCoding),
-      });
-    }
-
-    return sections;
+    setExam((prevExam) => ({
+      ...prevExam,
+      sections: buildSectionsFromCounts(
+        prevExam.sections,
+        nextMcqCount,
+        nextCodingCount
+      ),
+    }));
   };
 
   const updateQuestion = (sIdx, qIdx, field, value) => {
-    const sections = [...exam.sections];
-    sections[sIdx].questions[qIdx][field] = value;
-    setExam({ ...exam, sections });
+    updateSections((prevSections) =>
+      prevSections.map((section, sectionIndex) =>
+        sectionIndex !== sIdx
+          ? section
+          : {
+              ...section,
+              questions: section.questions.map((question, questionIndex) =>
+                questionIndex !== qIdx
+                  ? question
+                  : { ...question, [field]: value }
+              ),
+            }
+      )
+    );
   };
 
   const updateOption = (sIdx, qIdx, oIdx, value) => {
-    const sections = [...exam.sections];
-    sections[sIdx].questions[qIdx].options[oIdx] = value;
-    setExam({ ...exam, sections });
+    updateSections((prevSections) =>
+      prevSections.map((section, sectionIndex) =>
+        sectionIndex !== sIdx
+          ? section
+          : {
+              ...section,
+              questions: section.questions.map((question, questionIndex) =>
+                questionIndex !== qIdx
+                  ? question
+                  : {
+                      ...question,
+                      options: question.options.map((option, optionIndex) =>
+                        optionIndex === oIdx ? value : option
+                      ),
+                    }
+              ),
+            }
+      )
+    );
   };
 
   const updateTestCase = (sIdx, qIdx, tIdx, field, value) => {
-    const sections = [...exam.sections];
-    sections[sIdx].questions[qIdx].testCases[tIdx][field] = value;
-    setExam({ ...exam, sections });
+    updateSections((prevSections) =>
+      prevSections.map((section, sectionIndex) =>
+        sectionIndex !== sIdx
+          ? section
+          : {
+              ...section,
+              questions: section.questions.map((question, questionIndex) =>
+                questionIndex !== qIdx
+                  ? question
+                  : {
+                      ...question,
+                      testCases: question.testCases.map((testCase, testCaseIndex) =>
+                        testCaseIndex !== tIdx
+                          ? testCase
+                          : { ...testCase, [field]: value }
+                      ),
+                    }
+              ),
+            }
+      )
+    );
   };
 
   const addTestCase = (sIdx, qIdx) => {
-    const sections = [...exam.sections];
-    sections[sIdx].questions[qIdx].testCases.push({
-      input: '',
-      expectedOutput: '',
-    });
-    setExam({ ...exam, sections });
+    updateSections((prevSections) =>
+      prevSections.map((section, sectionIndex) =>
+        sectionIndex !== sIdx
+          ? section
+          : {
+              ...section,
+              questions: section.questions.map((question, questionIndex) =>
+                questionIndex !== qIdx
+                  ? question
+                  : {
+                      ...question,
+                      testCases: [
+                        ...(question.testCases || []),
+                        { input: '', expectedOutput: '' },
+                      ],
+                    }
+              ),
+            }
+      )
+    );
   };
 
   /* ---------- SUBMIT ---------- */
@@ -116,6 +257,14 @@ const CreateExam = () => {
 
       if (!exam.startTime || !exam.endTime) {
         return setError('Start time and end time are required');
+      }
+
+      if (!exam.title.trim() || !exam.description.trim()) {
+        return setError('Title and description are required');
+      }
+
+      if (!Number(exam.duration) || Number(exam.duration) < 1) {
+        return setError('Duration must be at least 1 minute');
       }
 
       const start = new Date(exam.startTime);
@@ -129,10 +278,15 @@ const CreateExam = () => {
         return setError('End time must be after start time');
       }
 
-      const sections = buildSections();
+      const sections = exam.sections;
 
       if (sections.length === 0) {
         return setError('Add at least one MCQ or Coding question');
+      }
+
+      const validationError = validateSections(sections);
+      if (validationError) {
+        return setError(validationError);
       }
 
       const totalQuestions = sections.reduce(
@@ -224,6 +378,7 @@ const CreateExam = () => {
                 label="Start Time"
                 fullWidth
                 InputLabelProps={{ shrink: true }}
+                value={exam.startTime}
                 onChange={(e) =>
                   setExam({ ...exam, startTime: e.target.value })
                 }
@@ -235,6 +390,7 @@ const CreateExam = () => {
                 label="End Time"
                 fullWidth
                 InputLabelProps={{ shrink: true }}
+                value={exam.endTime}
                 onChange={(e) =>
                   setExam({ ...exam, endTime: e.target.value })
                 }
@@ -254,7 +410,7 @@ const CreateExam = () => {
             label="Number of MCQ Questions"
             sx={{ mt: 2, mr: 2 }}
             value={mcqCount}
-            onChange={(e) => setMcqCount(Number(e.target.value))}
+            onChange={(e) => handleQuestionCountChange('mcq', e.target.value)}
           />
 
           <TextField
@@ -262,13 +418,13 @@ const CreateExam = () => {
             label="Number of Coding Questions"
             sx={{ mt: 2 }}
             value={codingCount}
-            onChange={(e) => setCodingCount(Number(e.target.value))}
+            onChange={(e) => handleQuestionCountChange('coding', e.target.value)}
           />
         </CardContent>
       </Card>
 
       {/* QUESTIONS */}
-      {buildSections().map((section, sIdx) => (
+      {exam.sections.map((section, sIdx) => (
         <Card key={sIdx} sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6">{section.title}</Typography>
@@ -285,21 +441,78 @@ const CreateExam = () => {
                 />
 
                 {q.questionType === 'mcq' &&
-                  q.options.map((opt, oIdx) => (
+                  <>
+                    {q.options.map((opt, oIdx) => (
+                      <TextField
+                        key={oIdx}
+                        fullWidth
+                        sx={{ mt: 1 }}
+                        label={`Option ${oIdx + 1}`}
+                        value={opt}
+                        onChange={(e) =>
+                          updateOption(sIdx, qIdx, oIdx, e.target.value)
+                        }
+                      />
+                    ))}
+
                     <TextField
-                      key={oIdx}
+                      select
                       fullWidth
                       sx={{ mt: 1 }}
-                      label={`Option ${oIdx + 1}`}
-                      value={opt}
+                      label="Correct Answer"
+                      value={q.correctAnswer}
                       onChange={(e) =>
-                        updateOption(sIdx, qIdx, oIdx, e.target.value)
+                        updateQuestion(
+                          sIdx,
+                          qIdx,
+                          'correctAnswer',
+                          Number(e.target.value)
+                        )
                       }
-                    />
-                  ))}
+                    >
+                      {q.options.map((_, oIdx) => (
+                        <MenuItem key={oIdx} value={oIdx}>
+                          Option {oIdx + 1}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </>}
+
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Points"
+                  sx={{ mt: 1 }}
+                  value={q.points}
+                  onChange={(e) =>
+                    updateQuestion(
+                      sIdx,
+                      qIdx,
+                      'points',
+                      Math.max(1, Number(e.target.value) || 1)
+                    )
+                  }
+                />
 
                 {q.questionType === 'coding' && (
                   <>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Language"
+                      sx={{ mt: 1 }}
+                      value={q.language}
+                      onChange={(e) =>
+                        updateQuestion(sIdx, qIdx, 'language', e.target.value)
+                      }
+                    >
+                      <MenuItem value="python">Python</MenuItem>
+                      <MenuItem value="javascript">JavaScript</MenuItem>
+                      <MenuItem value="java">Java</MenuItem>
+                      <MenuItem value="cpp">C++</MenuItem>
+                      <MenuItem value="c">C</MenuItem>
+                    </TextField>
+
                     <TextField
                       fullWidth
                       multiline

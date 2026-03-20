@@ -1,23 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { Container, Typography, Box, Divider, Chip } from '@mui/material';
-import axios from 'axios';
 import { useParams } from 'react-router-dom';
+import { examAPI } from '../../utils/api';
 
 const Results = () => {
   const { examId } = useParams();
   const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const loadResult = async () => {
-      const res = await axios.get(`/api/exam/${examId}/result`, {
-        withCredentials: true
-      });
-      setResult(res.data.examResult);
+      try {
+        const res = await examAPI.getExamResult(examId);
+        setResult(res.data.examResult);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to load result');
+      }
     };
     loadResult();
   }, [examId]);
 
-  if (!result) return <Typography>Loading result...</Typography>;
+  if (!result) {
+    return (
+      <Container sx={{ mt: 4 }}>
+        <Typography>{error || 'Loading result...'}</Typography>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="md" sx={{ mt: 4 }}>

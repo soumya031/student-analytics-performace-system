@@ -11,8 +11,8 @@ import {
   Alert
 } from '@mui/material';
 import Editor from '@monaco-editor/react';
-import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
+import { examAPI } from '../../utils/api';
 
 const ExamTaking = () => {
   const { examId } = useParams();
@@ -26,18 +26,21 @@ const ExamTaking = () => {
   const [codingAnswers, setCodingAnswers] = useState([]);
   const [runOutput, setRunOutput] = useState({});
   const [violations, setViolations] = useState(0);
+  const [error, setError] = useState('');
 
   
   useEffect(() => {
     const loadExam = async () => {
-      const res = await axios.get(`/api/exam/${examId}`, {
-        withCredentials: true
-      });
-      setExam(res.data.exam);
+      try {
+        const res = await examAPI.getExam(examId);
+        setExam(res.data.exam);
 
-      await axios.post(`/api/exam/${examId}/start`, {}, { withCredentials: true });
+        await examAPI.startExam(examId);
 
-      setTimeLeft(res.data.exam.duration * 60);
+        setTimeLeft(res.data.exam.duration * 60);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to load exam');
+      }
     };
     loadExam();
   }, [examId]);
@@ -82,33 +85,39 @@ const ExamTaking = () => {
   const handleMcq = (sIdx, qIdx, selectedAnswer) => {
     setMcqAnswers(prev => [
       ...prev.filter(a => !(a.sectionIndex === sIdx && a.questionIndex === qIdx)),
-      { sectionIndex: sIdx, questionIndex: qIdx, selectedAnswer }
+      { sectionIndex: sIdx, questionIndex: qIdx, selectedAnswer, timeSpent: 0 }
     ]);
   };
 
   
   const runCode = async (sIdx, qIdx, code, language) => {
-    const res = await axios.post(
-      `/api/exam/${examId}/compile`,
-      { code, language },
-      { withCredentials: true }
-    );
+    try {
+      const res = await examAPI.compileExam(examId, { code, language });
 
-    setRunOutput(prev => ({
-      ...prev,
-      [`${sIdx}-${qIdx}`]: res.data.result.output || res.data.result.stderr
-    }));
+      setRunOutput(prev => ({
+        ...prev,
+        [`${sIdx}-${qIdx}`]: res.data.result.output || res.data.result.stderr
+      }));
+    } catch (err) {
+      setRunOutput(prev => ({
+        ...prev,
+        [`${sIdx}-${qIdx}`]: err.response?.data?.message || 'Failed to run code'
+      }));
+    }
   };
 
   
   const handleSubmit = async () => {
     clearInterval(timerRef.current);
 
-    await axios.post(
-      `/api/exam/${examId}/submit`,
-      {
+    try {
+      await examAPI.submitExam(examId, {
         mcqAnswers,
-        codingAnswers,
+        codingAnswers: codingAnswers.map((answer) => ({
+          ...answer,
+          code: answer.code || '',
+          timeSpent: answer.timeSpent || 0,
+        })),
         timeTaken: exam.duration - Math.floor(timeLeft / 60),
         cheatingAttempts: [
           {
@@ -117,14 +126,21 @@ const ExamTaking = () => {
             description: `${violations} violations`
           }
         ]
-      },
-      { withCredentials: true }
-    );
+      });
 
-    navigate(`/exam/${examId}/result`);
+      navigate(`/exam/${examId}/result`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to submit exam');
+    }
   };
 
-  if (!exam) return <Typography>Loading...</Typography>;
+  if (!exam) {
+    return (
+      <Container sx={{ mt: 4 }}>
+        {error ? <Alert severity="error">{error}</Alert> : <Typography>Loading...</Typography>}
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
@@ -135,6 +151,12 @@ const ExamTaking = () => {
 
       {violations > 0 && (
         <Alert severity="warning">Violations: {violations}</Alert>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
       )}
 
       {exam.sections.map((sec, sIdx) => (
@@ -169,7 +191,13 @@ const ExamTaking = () => {
                     onChange={value => {
                       setCodingAnswers(prev => [
                         ...prev.filter(a => !(a.sectionIndex === sIdx && a.questionIndex === qIdx)),
-                        { sectionIndex: sIdx, questionIndex: qIdx, code: value, language: q.language }
+                        {
+                          sectionIndex: sIdx,
+                          questionIndex: qIdx,
+                          code: value || '',
+                          language: q.language || 'python',
+                          timeSpent: 0
+                        }
                       ]);
                     }}
                   />
