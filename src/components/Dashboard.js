@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Container,
   Grid,
@@ -16,6 +16,7 @@ import {
   Divider,
   Alert,
   CircularProgress,
+  Stack,
 } from '@mui/material';
 import {
   School,
@@ -24,7 +25,7 @@ import {
   Analytics,
   Add,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { examAPI, studentAPI } from '../utils/api';
 import {
@@ -34,9 +35,38 @@ import {
   formatDate,
 } from '../utils/api';
 
+const getStoredSubmittedResult = () => {
+  try {
+    const value = localStorage.getItem('latestSubmittedExamResult');
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildFallbackResult = (submittedResult) => {
+  if (!submittedResult) return null;
+
+  return {
+    _id: submittedResult.examResultId || `local-${submittedResult.examId || Date.now()}`,
+    exam: {
+      _id: submittedResult.examId,
+      title: submittedResult.examTitle || 'Exam',
+      subject: submittedResult.subject || 'computer_science',
+    },
+    score: submittedResult.score || 0,
+    totalPoints: submittedResult.totalPoints || 0,
+    percentage: submittedResult.percentage || 0,
+    endTime: submittedResult.submittedAt,
+    createdAt: submittedResult.submittedAt,
+    isLocalFallback: true,
+  };
+};
+
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [loading, setLoading] = useState(true);
   const [availableExams, setAvailableExams] = useState([]);
@@ -47,9 +77,45 @@ const Dashboard = () => {
     loadData();
   }, []);
 
-  /* ============================
-     POINT 9 – DATA CHANGE
-     ============================ */
+  const submittedResult = location.state?.submittedResult || getStoredSubmittedResult();
+  const displayResults = useMemo(() => {
+    const fallbackResult = buildFallbackResult(submittedResult);
+    if (!fallbackResult) return history;
+
+    const alreadyPresent = history.some((item) => (
+      String(item._id) === String(fallbackResult._id)
+      || String(item.exam?._id) === String(fallbackResult.exam?._id)
+    ));
+
+    return alreadyPresent ? history : [fallbackResult, ...history];
+  }, [history, submittedResult]);
+
+  const latestResult = useMemo(() => displayResults[0] || null, [displayResults]);
+
+  const calculatedOverviewStats = useMemo(() => ({
+    totalExams: displayResults.length,
+    averageScore: displayResults.length
+      ? displayResults.reduce((sum, item) => sum + (item.percentage || 0), 0) / displayResults.length
+      : 0,
+    totalScore: displayResults.reduce((sum, item) => sum + (item.percentage || 0), 0),
+  }), [displayResults]);
+
+  const overviewStats = analytics?.overallStats?.totalExams
+    ? analytics.overallStats
+    : calculatedOverviewStats;
+
+  useEffect(() => {
+    if (!submittedResult?.examResultId) return;
+
+    const isPersisted = history.some(
+      (item) => String(item._id) === String(submittedResult.examResultId)
+    );
+
+    if (isPersisted) {
+      localStorage.removeItem('latestSubmittedExamResult');
+    }
+  }, [history, submittedResult]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -87,7 +153,7 @@ const Dashboard = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
       <Typography variant="h4" gutterBottom>
-        Welcome back, {user.firstName}! 👋
+        Welcome back, {user.firstName}!
       </Typography>
 
       <Typography color="text.secondary" gutterBottom>
@@ -96,8 +162,17 @@ const Dashboard = () => {
           : 'Track performance and take exams'}
       </Typography>
 
+      {user.role === 'student' && submittedResult && (
+        <Alert severity="success" sx={{ mt: 3 }}>
+          {submittedResult.examTitle || 'Exam'} submitted successfully. Score:
+          {' '}
+          {submittedResult.score}/{submittedResult.totalPoints}
+          {' '}
+          ({submittedResult.percentage}%).
+        </Alert>
+      )}
+
       <Grid container spacing={3} sx={{ mt: 2 }}>
-        {/* QUICK ACTIONS */}
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
@@ -144,7 +219,6 @@ const Dashboard = () => {
           </Card>
         </Grid>
 
-        {/* EXAMS LIST */}
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
@@ -175,7 +249,7 @@ const Dashboard = () => {
                             secondary={
                               user.role === 'teacher'
                                 ? `Status: ${status.toUpperCase()} | Duration: ${exam.duration} mins`
-                                : `${getSubjectName(exam.subject)} • ${exam.duration} mins`
+                                : `${getSubjectName(exam.subject)} | ${exam.duration} mins`
                             }
                           />
 
@@ -187,8 +261,8 @@ const Dashboard = () => {
                                   status === 'live'
                                     ? 'success'
                                     : status === 'upcoming'
-                                    ? 'warning'
-                                    : 'default'
+                                      ? 'warning'
+                                      : 'default'
                                 }
                                 sx={{ mr: 2 }}
                               />
@@ -197,9 +271,7 @@ const Dashboard = () => {
                                 size="small"
                                 variant="outlined"
                                 sx={{ mr: 1 }}
-                                onClick={() =>
-                                  navigate(`/exam/edit/${exam._id}`)
-                                }
+                                onClick={() => navigate(`/exam/edit/${exam._id}`)}
                               >
                                 Edit
                               </Button>
@@ -224,9 +296,7 @@ const Dashboard = () => {
                             <Button
                               variant="contained"
                               disabled={status !== 'live'}
-                              onClick={() =>
-                                navigate(`/exam/${exam._id}`)
-                              }
+                              onClick={() => navigate(`/exam/${exam._id}`)}
                             >
                               {status === 'live' ? 'Start' : 'Not Live'}
                             </Button>
@@ -243,31 +313,65 @@ const Dashboard = () => {
           </Card>
         </Grid>
 
-        {/* STUDENT RECENT EXAMS */}
         {user.role === 'student' && (
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Typography variant="h6">Recent Exams</Typography>
+                <Typography variant="h6">Performance Overview</Typography>
+                <Typography sx={{ mt: 2 }}>
+                  Total Exams: {overviewStats.totalExams || 0}
+                </Typography>
+                <Typography>
+                  Average Score: {(overviewStats.averageScore || 0).toFixed(1)}%
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
 
-                {history.length === 0 ? (
+        {user.role === 'student' && (
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6">Submitted Results</Typography>
+
+                {latestResult && (
+                  <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+                    Latest result: {latestResult.exam.title} scored {latestResult.score}/{latestResult.totalPoints} ({latestResult.percentage}%) on {formatDate(latestResult.endTime || latestResult.createdAt)}.
+                  </Alert>
+                )}
+
+                {displayResults.length === 0 ? (
                   <Alert severity="info">No attempts yet</Alert>
                 ) : (
                   <List>
-                    {history.map((res) => (
-                      <ListItem key={res._id}>
-                        <ListItemText
-                          primary={res.exam.title}
-                          secondary={`${formatDate(res.createdAt)} • ${res.percentage}%`}
-                        />
-                        <Chip
-                          label={getGrade(res.percentage).grade}
-                          sx={{
-                            bgcolor: getGrade(res.percentage).color,
-                            color: '#fff',
-                          }}
-                        />
-                      </ListItem>
+                    {displayResults.map((res, index) => (
+                      <React.Fragment key={res._id}>
+                        <ListItem>
+                          <ListItemText
+                            primary={res.exam.title}
+                            secondary={`${formatDate(res.endTime || res.createdAt)} | ${getSubjectName(res.exam.subject)} | ${res.score}/${res.totalPoints} | ${res.percentage}%${res.isLocalFallback ? ' | Syncing saved result' : ''}`}
+                          />
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Chip
+                              label={getGrade(res.percentage).grade}
+                              sx={{
+                                bgcolor: getGrade(res.percentage).color,
+                                color: '#fff',
+                              }}
+                            />
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={!res.exam?._id}
+                              onClick={() => navigate(`/exam/${res.exam._id}/result`)}
+                            >
+                              View Result
+                            </Button>
+                          </Stack>
+                        </ListItem>
+                        {index < displayResults.length - 1 && <Divider />}
+                      </React.Fragment>
                     ))}
                   </List>
                 )}

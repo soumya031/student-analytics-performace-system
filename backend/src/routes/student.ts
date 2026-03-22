@@ -37,9 +37,12 @@ const getTargetStudent = async (req: any) => {
 // Get student's exam history
 router.get('/history', requireStudent, async (req: any, res) => {
   try {
-    const examResults = await ExamResult.find({ student: req.user._id })
+    const examResults = await ExamResult.find({
+      student: req.user._id,
+      isCompleted: true
+    })
       .populate('exam', 'title subject startTime endTime')
-      .sort({ createdAt: -1 });
+      .sort({ endTime: -1, createdAt: -1 });
 
     res.json({ examResults });
   } catch (error) {
@@ -56,9 +59,12 @@ router.get('/history/:studentId', async (req: any, res) => {
       return res.status(404).json({ message: 'Student not found or access denied' });
     }
 
-    const examResults = await ExamResult.find({ student: student._id })
+    const examResults = await ExamResult.find({
+      student: student._id,
+      isCompleted: true
+    })
       .populate('exam', 'title subject startTime endTime')
-      .sort({ createdAt: -1 });
+      .sort({ endTime: -1, createdAt: -1 });
 
     res.json({ studentId: student.studentId, examResults });
   } catch (error) {
@@ -70,7 +76,10 @@ router.get('/history/:studentId', async (req: any, res) => {
 // Get student's performance analytics
 router.get('/analytics', requireStudent, async (req: any, res) => {
   try {
-    const examResults = await ExamResult.find({ student: req.user._id })
+    const examResults = await ExamResult.find({
+      student: req.user._id,
+      isCompleted: true
+    })
       .populate('exam', 'subject title');
 
     // Calculate performance by subject
@@ -79,6 +88,8 @@ router.get('/analytics', requireStudent, async (req: any, res) => {
     let totalScore = 0;
 
     examResults.forEach((result: any) => {
+      if (!result.exam) return;
+
       const subject = result.exam.subject;
       if (!subjectPerformance[subject]) {
         subjectPerformance[subject] = {
@@ -129,7 +140,10 @@ router.get('/analytics/:studentId', async (req: any, res) => {
       return res.status(404).json({ message: 'Student not found or access denied' });
     }
 
-    const examResults = await ExamResult.find({ student: student._id })
+    const examResults = await ExamResult.find({
+      student: student._id,
+      isCompleted: true
+    })
       .populate('exam', 'subject title');
 
     const subjectPerformance: any = {};
@@ -137,6 +151,8 @@ router.get('/analytics/:studentId', async (req: any, res) => {
     let totalScore = 0;
 
     examResults.forEach((result: any) => {
+      if (!result.exam) return;
+
       const subject = result.exam.subject;
       if (!subjectPerformance[subject]) {
         subjectPerformance[subject] = {

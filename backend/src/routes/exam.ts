@@ -258,6 +258,18 @@ router.post('/:examId/start', requireStudent, async (req: any, res) => {
   const exam = await Exam.findById(req.params.examId);
   if (!exam) return res.status(404).json({ message: 'Exam not found' });
 
+  const existingResult = await ExamResult.findOne({
+    student: req.user._id,
+    exam: exam._id
+  });
+
+  if (existingResult) {
+    return res.json({
+      examResultId: existingResult._id,
+      isCompleted: existingResult.isCompleted
+    });
+  }
+
   const result = new ExamResult({
     student: req.user._id,
     exam: exam._id,
@@ -267,7 +279,7 @@ router.post('/:examId/start', requireStudent, async (req: any, res) => {
   });
 
   await result.save();
-  res.json({ examResultId: result._id });
+  res.json({ examResultId: result._id, isCompleted: false });
 });
 
 /**
@@ -287,72 +299,97 @@ router.post('/:examId/compile', requireStudent, async (req, res) => {
  * SUBMIT EXAM
  */
 router.post('/:examId/submit', requireStudent, async (req: any, res) => {
-  if (!validateStudentIdScope(req, res)) return;
+  try {
+    if (!validateStudentIdScope(req, res)) return;
 
-  const { mcqAnswers = [], codingAnswers = [], timeTaken } = req.body;
+    const {
+      mcqAnswers = [],
+      codingAnswers = [],
+      timeTaken = 0,
+      cheatingAttempts = []
+    } = req.body;
 
-  const exam = await Exam.findById(req.params.examId);
-  if (!exam) return res.status(404).json({ message: 'Exam not found' });
+    const exam = await Exam.findById(req.params.examId);
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
 
-  const examResult = await ExamResult.findOne({
-    student: req.user._id,
-    exam: exam._id
-  });
-
-  if (!examResult) {
-    return res.status(404).json({ message: 'Exam not started' });
-  }
-
-  let score = 0;
-
-  /* MCQ */
-  const mcqProcessed: any[] = [];
-  for (const ans of mcqAnswers) {
-    const q = exam.sections[ans.sectionIndex]?.questions[ans.questionIndex];
-    if (!q || q.questionType !== 'mcq') continue;
-
-    const correct = q.correctAnswer === ans.selectedAnswer;
-    const points = correct ? q.points : 0;
-    score += points;
-
-    mcqProcessed.push({ ...ans, isCorrect: correct, pointsEarned: points });
-  }
-
-  /* CODING */
-  const codingProcessed: any[] = [];
-  for (const ans of codingAnswers) {
-    const q = exam.sections[ans.sectionIndex]?.questions[ans.questionIndex];
-    if (!q || q.questionType !== 'coding') continue;
-
-    const run = await runCodeAgainstTestCases(ans.code, ans.language, q.testCases || []);
-    const earned = Math.round((run.passedCount / Math.max(1, run.totalCount)) * q.points);
-    score += earned;
-
-    codingProcessed.push({
-      ...ans,
-      passedCount: run.passedCount,
-      totalCount: run.totalCount,
-      outputPerTest: run.outputs,
-      pointsEarned: earned
+    let examResult = await ExamResult.findOne({
+      student: req.user._id,
+      exam: exam._id
     });
+
+    if (!examResult) {
+      examResult = new ExamResult({
+        student: req.user._id,
+        exam: exam._id,
+        totalPoints: exam.totalPoints,
+        startTime: new Date(),
+        isCompleted: false
+      });
+    }
+
+    let score = 0;
+
+    /* MCQ */
+    const mcqProcessed: any[] = [];
+    for (const ans of mcqAnswers) {
+      const q = exam.sections[ans.sectionIndex]?.questions[ans.questionIndex];
+      if (!q || q.questionType !== 'mcq') continue;
+
+      const correct = q.correctAnswer === ans.selectedAnswer;
+      const points = correct ? q.points : 0;
+      score += points;
+
+      mcqProcessed.push({
+        ...ans,
+        timeSpent: Number(ans.timeSpent || 0),
+        isCorrect: correct,
+        pointsEarned: points
+      });
+    }
+
+    /* CODING */
+    const codingProcessed: any[] = [];
+    for (const ans of codingAnswers) {
+      const q = exam.sections[ans.sectionIndex]?.questions[ans.questionIndex];
+      if (!q || q.questionType !== 'coding') continue;
+
+      const run = await runCodeAgainstTestCases(ans.code, ans.language, q.testCases || []);
+      const earned = Math.round((run.passedCount / Math.max(1, run.totalCount)) * q.points);
+      score += earned;
+
+      codingProcessed.push({
+        ...ans,
+        timeSpent: Number(ans.timeSpent || 0),
+        passedCount: run.passedCount,
+        totalCount: run.totalCount,
+        outputPerTest: run.outputs,
+        pointsEarned: earned
+      });
+    }
+
+    examResult.mcqAnswers = mcqProcessed;
+    examResult.codingAnswers = codingProcessed;
+    examResult.score = score;
+    examResult.percentage = Math.round((score / exam.totalPoints) * 100);
+    examResult.timeTaken = Number(timeTaken || 0);
+    examResult.cheatingAttempts = Array.isArray(cheatingAttempts) ? cheatingAttempts : [];
+    examResult.endTime = new Date();
+    examResult.isCompleted = true;
+
+    await examResult.save();
+
+    res.json({
+      message: 'Exam submitted successfully',
+      examResultId: examResult._id,
+      score: examResult.score,
+      percentage: examResult.percentage,
+      examTitle: exam.title,
+      totalPoints: exam.totalPoints
+    });
+  } catch (error) {
+    console.error('Submit exam error:', error);
+    res.status(500).json({ message: 'Failed to submit exam' });
   }
-
-  examResult.mcqAnswers = mcqProcessed;
-  examResult.codingAnswers = codingProcessed;
-  examResult.score = score;
-  examResult.percentage = Math.round((score / exam.totalPoints) * 100);
-  examResult.timeTaken = timeTaken;
-  examResult.endTime = new Date();
-  examResult.isCompleted = true;
-
-  await examResult.save();
-
-  res.json({
-    message: 'Exam submitted successfully',
-    examResultId: examResult._id,
-    score: examResult.score,
-    percentage: examResult.percentage
-  });
 });
 
 router.get('/:examId/result', requireStudent, async (req: any, res) => {

@@ -27,6 +27,7 @@ const ExamTaking = () => {
   const [runOutput, setRunOutput] = useState({});
   const [violations, setViolations] = useState(0);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   
   useEffect(() => {
@@ -108,10 +109,14 @@ const ExamTaking = () => {
 
   
   const handleSubmit = async () => {
+    if (submitting) return;
+
     clearInterval(timerRef.current);
+    setSubmitting(true);
+    setError('');
 
     try {
-      await examAPI.submitExam(examId, {
+      const response = await examAPI.submitExam(examId, {
         mcqAnswers,
         codingAnswers: codingAnswers.map((answer) => ({
           ...answer,
@@ -128,9 +133,24 @@ const ExamTaking = () => {
         ]
       });
 
-      navigate(`/exam/${examId}/result`);
+      localStorage.setItem(
+        'latestSubmittedExamResult',
+        JSON.stringify({
+          ...response.data,
+          examId,
+          subject: exam.subject,
+          submittedAt: new Date().toISOString(),
+        })
+      );
+
+      navigate('/dashboard', {
+        state: {
+          submittedResult: response.data,
+        },
+      });
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit exam');
+      setSubmitting(false);
     }
   };
 
@@ -227,9 +247,10 @@ const ExamTaking = () => {
         color="error"
         variant="contained"
         sx={{ mt: 4 }}
+        disabled={submitting}
         onClick={handleSubmit}
       >
-        Submit Exam
+        {submitting ? 'Submitting...' : 'Submit Exam'}
       </Button>
     </Container>
   );
