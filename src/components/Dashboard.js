@@ -337,7 +337,7 @@ const Dashboard = () => {
 
                 {latestResult && (
                   <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-                    Latest result: {latestResult.exam.title} scored {latestResult.score}/{latestResult.totalPoints} ({latestResult.percentage}%) on {formatDate(latestResult.endTime || latestResult.createdAt)}.
+                    Latest result: {latestResult.exam?.title || 'Untitled Exam'} scored {latestResult.score}/{latestResult.totalPoints} ({latestResult.percentage}%) on {formatDate(latestResult.endTime || latestResult.createdAt)}.
                   </Alert>
                 )}
 
@@ -349,8 +349,8 @@ const Dashboard = () => {
                       <React.Fragment key={res._id}>
                         <ListItem>
                           <ListItemText
-                            primary={res.exam.title}
-                            secondary={`${formatDate(res.endTime || res.createdAt)} | ${getSubjectName(res.exam.subject)} | ${res.score}/${res.totalPoints} | ${res.percentage}%${res.isLocalFallback ? ' | Syncing saved result' : ''}`}
+                            primary={res.exam?.title || 'Untitled Exam'}
+                            secondary={`${formatDate(res.endTime || res.createdAt)} | ${getSubjectName(res.exam?.subject)} | ${res.score}/${res.totalPoints} | ${res.percentage}%${res.isLocalFallback ? ' | Syncing saved result' : ''}`}
                           />
                           <Stack direction="row" spacing={1} alignItems="center">
                             <Chip
