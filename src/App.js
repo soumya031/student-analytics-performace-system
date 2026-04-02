@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
+import ForgotPassword from './components/auth/ForgotPassword';
 import Dashboard from './components/Dashboard';
 import ExamList from './components/exam/ExamList';
 import ExamTaking from './components/exam/ExamTaking';
@@ -34,22 +35,22 @@ const theme = createTheme({
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <div>Loading...</div>;
-  if (!user) return <Navigate to="/login" />;
+  if (!user) return <Navigate to="/login" replace />;
   return children;
 };
 
 const TeacherRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <div>Loading...</div>;
-  if (!user) return <Navigate to="/login" />;
-  if (user.role !== 'teacher') return <Navigate to="/dashboard" />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'teacher') return <Navigate to="/dashboard" replace />;
   return children;
 };
 
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <div>Loading...</div>;
-  return user ? <Navigate to="/dashboard" /> : children;
+  return user ? <Navigate to="/dashboard" replace /> : children;
 };
 
 // ---------- APP ----------
@@ -67,6 +68,7 @@ function App() {
               {/* PUBLIC */}
               <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
               <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+              <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
 
               {/* PROTECTED */}
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -81,7 +83,7 @@ function App() {
               <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
-              <Route path="/" element={<Navigate to="/dashboard" />} />
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Box>
         </Router>

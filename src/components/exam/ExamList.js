@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Box,
   Container,
   Typography,
   Card,
@@ -8,26 +9,42 @@ import {
   Grid,
   Alert,
   Chip,
+  Stack,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { examAPI } from '../../utils/api';
+import {
+  filterStudentVisibleExams,
+  hideExpiredExam,
+} from './studentExamVisibility';
 
 const ExamList = () => {
   const [exams, setExams] = useState([]);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadExams();
-  }, []);
-
-  const loadExams = async () => {
+  const loadExams = useCallback(async () => {
     try {
+      setError('');
       const res = await examAPI.getAllExamsWithStatus();
       setExams(res.data.exams || []);
     } catch (err) {
-      setError('Failed to load exams');
+      setError(err.response?.data?.message || 'Failed to load exams');
     }
+  }, []);
+
+  useEffect(() => {
+    loadExams();
+  }, [loadExams]);
+
+  const visibleExams = useMemo(
+    () => filterStudentVisibleExams(exams),
+    [exams]
+  );
+
+  const dismissExpiredExam = (examId) => {
+    hideExpiredExam(examId);
+    setExams((currentExams) => currentExams.filter((exam) => exam._id !== examId));
   };
 
   return (
@@ -36,14 +53,18 @@ const ExamList = () => {
         Exams
       </Typography>
 
+      <Typography color="text.secondary">
+        Upcoming and live exams stay visible. Expired exams remain here for 24 hours unless you dismiss them sooner.
+      </Typography>
+
       {error && <Alert severity="error">{error}</Alert>}
 
-      {exams.length === 0 && !error && (
+      {visibleExams.length === 0 && !error && (
         <Alert severity="info">No exams available</Alert>
       )}
 
       <Grid container spacing={3} sx={{ mt: 1 }}>
-        {exams.map((exam) => (
+        {visibleExams.map((exam) => (
           <Grid item xs={12} md={6} key={exam._id}>
             <Card>
               <CardContent>
@@ -68,14 +89,50 @@ const ExamList = () => {
                   Duration: {exam.duration} mins
                 </Typography>
 
-                <Button
-                  variant="contained"
-                  sx={{ mt: 2 }}
-                  disabled={exam.status !== 'live'}
-                  onClick={() => navigate(`/exam/${exam._id}`)}
-                >
-                  {exam.status === 'live' ? 'Start Exam' : 'Not Live'}
-                </Button>
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Starts: {new Date(exam.startTime).toLocaleString('en-IN')}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Ends: {new Date(exam.endTime).toLocaleString('en-IN')}
+                  </Typography>
+                </Box>
+
+                <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap' }}>
+                  {exam.status === 'live' && !exam.isCompleted && (
+                    <Button
+                      variant="contained"
+                      onClick={() => navigate(`/exam/${exam._id}`)}
+                    >
+                      {exam.hasStarted ? 'Resume Exam' : 'Start Exam'}
+                    </Button>
+                  )}
+
+                  {exam.isCompleted && (
+                    <Button
+                      variant="outlined"
+                      onClick={() => navigate(`/exam/${exam._id}/result`)}
+                    >
+                      View Result
+                    </Button>
+                  )}
+
+                  {exam.status === 'upcoming' && (
+                    <Button variant="outlined" disabled>
+                      Upcoming
+                    </Button>
+                  )}
+
+                  {exam.status === 'expired' && (
+                    <Button
+                      color="error"
+                      variant="outlined"
+                      onClick={() => dismissExpiredExam(exam._id)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </Stack>
               </CardContent>
             </Card>
           </Grid>

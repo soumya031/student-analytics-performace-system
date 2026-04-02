@@ -8,6 +8,7 @@ export interface IUser extends Document {
   lastName: string;
   role: 'student' | 'admin' | 'teacher';
   studentId?: string;
+  teacherId?: string;
   department?: string;
   year?: number;
   semester?: number;
@@ -48,6 +49,11 @@ const userSchema = new Schema<IUser>({
     default: 'student'
   },
   studentId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  teacherId: {
     type: String,
     unique: true,
     sparse: true

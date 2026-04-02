@@ -5,8 +5,22 @@ const BACKEND_API_URL =
 
 const backendApi = axios.create({
   baseURL: BACKEND_API_URL,
-  timeout: 15000,
+  timeout: 30000,
 });
+
+const isAuthEndpoint = (url = '') => (
+  url.includes('/auth/login')
+  || url.includes('/auth/register')
+  || url.includes('/auth/forgot-password')
+);
+
+const getRequestToken = (config) => {
+  const authHeader = config?.headers?.Authorization || config?.headers?.authorization;
+  if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  return authHeader.slice(7);
+};
 
 /* Attach JWT */
 backendApi.interceptors.request.use((config) => {
@@ -20,10 +34,42 @@ backendApi.interceptors.request.use((config) => {
 /* Handle auth expiry */
 backendApi.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
+  async (err) => {
+    const requestMethod = (err.config?.method || '').toLowerCase();
+    const requestStatus = err.response?.status;
+    const shouldRetry =
+      err.config
+      && !err.config.__retry
+      && requestMethod === 'get'
+      && (
+        !err.response
+        || requestStatus === 429
+        || requestStatus >= 500
+        || err.code === 'ECONNABORTED'
+      );
+
+    if (shouldRetry) {
+      err.config.__retry = true;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return backendApi(err.config);
+    }
+
+    const token = localStorage.getItem('token');
+    const requestUrl = err.config?.url || '';
+    const requestToken = getRequestToken(err.config);
+    const shouldClearSession =
+      err.response?.status === 401
+      && token
+      && requestToken
+      && token === requestToken
+      && !isAuthEndpoint(requestUrl);
+
+    if (shouldClearSession) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      localStorage.removeItem('latestSubmittedExamResult');
+      if (window.location.pathname !== '/login') {
+        window.location.replace('/login');
+      }
     }
     return Promise.reject(err);
   }
@@ -58,9 +104,17 @@ export const studentAPI = {
     backendApi.get(`/student/history/${studentId}`),
   getAnalyticsByStudentId: (studentId) =>
     backendApi.get(`/student/analytics/${studentId}`),
-  getRemarks: (studentId) => backendApi.get(`/student/remarks/${studentId}`),
-  addRemark: (studentId, remark) =>
-    backendApi.post(`/student/remarks/${studentId}`, { remark }),
+  getRemarks: (studentId, params = {}) =>
+    backendApi.get(`/student/remarks/${studentId}`, { params }),
+  addRemark: (studentId, payload) =>
+    backendApi.post(
+      `/student/remarks/${studentId}`,
+      typeof payload === 'string' ? { remark: payload } : payload
+    ),
+  getTeacherStudents: () => backendApi.get('/student/teacher/students'),
+  getTeacherAnalyticsReference: () => backendApi.get('/student/teacher/analytics-reference'),
+  getTeacherStudentReference: (studentId) =>
+    backendApi.get(`/student/teacher/analytics-reference/${studentId}`),
 };
 
 export const adminAPI = {

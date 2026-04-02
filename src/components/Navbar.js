@@ -53,7 +53,7 @@ const Navbar = () => {
   const handleLogout = () => {
     logout();
     handleMenuClose();
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
 
   const handleMobileToggle = () => {
@@ -164,9 +164,9 @@ const Navbar = () => {
 
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        {user.role === 'student' && (
+        {(user.role === 'student' || user.role === 'teacher') && (
           <Chip
-            label={user.studentId || 'Student'}
+            label={user.studentId || user.teacherId || (user.role === 'teacher' ? 'Teacher' : 'Student')}
             size="small"
             color="secondary"
             variant="outlined"

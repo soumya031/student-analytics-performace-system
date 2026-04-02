@@ -50,7 +50,7 @@ const Login = () => {
     const result = await login(formData.email, formData.password);
     
     if (result.success) {
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } else {
       setError(result.error);
     }
@@ -177,6 +177,11 @@ const Login = () => {
             </Button>
 
             <Box sx={{ textAlign: 'center' }}>
+              <Box sx={{ mb: 1 }}>
+                <Link component={RouterLink} to="/forgot-password" variant="body2">
+                  Forgot password?
+                </Link>
+              </Box>
               <Typography variant="body2" color="text.secondary">
                 Don't have an account?{' '}
                 <Link component={RouterLink} to="/register" variant="body2">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Container,
   Grid,
@@ -34,6 +34,10 @@ import {
   getGrade,
   formatDate,
 } from '../utils/api';
+import {
+  filterStudentVisibleExams,
+  hideExpiredExam,
+} from './exam/studentExamVisibility';
 
 const getStoredSubmittedResult = () => {
   try {
@@ -72,10 +76,57 @@ const Dashboard = () => {
   const [availableExams, setAvailableExams] = useState([]);
   const [history, setHistory] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [historyError, setHistoryError] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  const dismissExpiredExam = (examId) => {
+    hideExpiredExam(examId);
+    setAvailableExams((currentExams) =>
+      currentExams.filter((exam) => exam._id !== examId)
+    );
+  };
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const exams =
+        user.role === 'teacher'
+          ? await examAPI.getTeacherExams()
+          : await examAPI.getAllExamsWithStatus();
+
+      const nextExams = exams.data.exams || [];
+      setAvailableExams(
+        user.role === 'student' ? filterStudentVisibleExams(nextExams) : nextExams
+      );
+
+      if (user.role === 'student') {
+        try {
+          const [historyResponse, analyticsResponse] = await Promise.all([
+            studentAPI.getExamHistory(),
+            studentAPI.getAnalytics(),
+          ]);
+          setHistory(historyResponse.data.examResults || []);
+          setAnalytics(analyticsResponse.data);
+          setHistoryError('');
+        } catch (err) {
+          setHistory([]);
+          setAnalytics(null);
+          setHistoryError(
+            err.response?.data?.message || 'Failed to load submitted exam results'
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Dashboard load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user.role]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const submittedResult = location.state?.submittedResult || getStoredSubmittedResult();
   const displayResults = useMemo(() => {
@@ -116,30 +167,6 @@ const Dashboard = () => {
     }
   }, [history, submittedResult]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-
-      const exams =
-        user.role === 'teacher'
-          ? await examAPI.getTeacherExams()
-          : await examAPI.getAllExamsWithStatus();
-
-      setAvailableExams(exams.data.exams || []);
-
-      if (user.role === 'student') {
-        const h = await studentAPI.getExamHistory();
-        const a = await studentAPI.getAnalytics();
-        setHistory(h.data.examResults || []);
-        setAnalytics(a.data);
-      }
-    } catch (err) {
-      console.error('Dashboard load error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (loading) {
     return (
       <Container sx={{ mt: 4 }}>
@@ -161,6 +188,12 @@ const Dashboard = () => {
           ? 'Manage and monitor exams'
           : 'Track performance and take exams'}
       </Typography>
+
+      {actionError && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {actionError}
+        </Alert>
+      )}
 
       {user.role === 'student' && submittedResult && (
         <Alert severity="success" sx={{ mt: 3 }}>
@@ -282,8 +315,15 @@ const Dashboard = () => {
                                 variant="outlined"
                                 onClick={async () => {
                                   if (window.confirm('Delete this exam?')) {
-                                    await examAPI.deleteExam(exam._id);
-                                    loadData();
+                                    try {
+                                      setActionError('');
+                                      await examAPI.deleteExam(exam._id);
+                                      await loadData();
+                                    } catch (err) {
+                                      setActionError(
+                                        err.response?.data?.message || 'Failed to delete exam'
+                                      );
+                                    }
                                   }
                                 }}
                               >
@@ -293,13 +333,38 @@ const Dashboard = () => {
                           )}
 
                           {user.role === 'student' && (
-                            <Button
-                              variant="contained"
-                              disabled={status !== 'live'}
-                              onClick={() => navigate(`/exam/${exam._id}`)}
-                            >
-                              {status === 'live' ? 'Start' : 'Not Live'}
-                            </Button>
+                            <Stack direction="row" spacing={1}>
+                              {exam.isCompleted ? (
+                                <Button
+                                  variant="outlined"
+                                  onClick={() => navigate(`/exam/${exam._id}/result`)}
+                                >
+                                  Result
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="contained"
+                                  disabled={status !== 'live'}
+                                  onClick={() => navigate(`/exam/${exam._id}`)}
+                                >
+                                  {status === 'live'
+                                    ? exam.hasStarted
+                                      ? 'Resume'
+                                      : 'Start'
+                                    : 'Not Live'}
+                                </Button>
+                              )}
+
+                              {status === 'expired' && (
+                                <Button
+                                  color="error"
+                                  variant="outlined"
+                                  onClick={() => dismissExpiredExam(exam._id)}
+                                >
+                                  Remove
+                                </Button>
+                              )}
+                            </Stack>
                           )}
                         </ListItem>
 
@@ -335,6 +400,12 @@ const Dashboard = () => {
               <CardContent>
                 <Typography variant="h6">Submitted Results</Typography>
 
+                {historyError && (
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    {historyError}
+                  </Alert>
+                )}
+
                 {latestResult && (
                   <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
                     Latest result: {latestResult.exam?.title || 'Untitled Exam'} scored {latestResult.score}/{latestResult.totalPoints} ({latestResult.percentage}%) on {formatDate(latestResult.endTime || latestResult.createdAt)}.
@@ -342,7 +413,9 @@ const Dashboard = () => {
                 )}
 
                 {displayResults.length === 0 ? (
-                  <Alert severity="info">No attempts yet</Alert>
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    No submitted results found yet.
+                  </Alert>
                 ) : (
                   <List>
                     {displayResults.map((res, index) => (

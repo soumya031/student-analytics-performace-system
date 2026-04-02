@@ -6,6 +6,7 @@ export type SectionType = 'mcq' | 'coding' | 'other';
 export interface ICodingTestCase {
   input: string;
   expectedOutput: string;
+  isHidden?: boolean;
 }
 
 export interface IQuestion {
@@ -54,7 +55,8 @@ export interface IExam extends Document {
 
 const codingTestCaseSchema = new Schema<ICodingTestCase>({
   input: { type: String, required: true },
-  expectedOutput: { type: String, required: true }
+  expectedOutput: { type: String, required: true },
+  isHidden: { type: Boolean, default: false }
 }, { _id: false });
 
 const questionSchema = new Schema<IQuestion>({

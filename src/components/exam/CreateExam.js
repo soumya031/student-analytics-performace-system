@@ -5,8 +5,10 @@ import {
   TextField,
   Button,
   Box,
+  Checkbox,
   Card,
   CardContent,
+  FormControlLabel,
   MenuItem,
   Divider,
   Alert,
@@ -14,6 +16,7 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { examAPI } from '../../utils/api';
+import { buildExamPayload, toIsoDateTime } from './examFormUtils';
 
 /* ---------- Templates ---------- */
 
@@ -31,7 +34,7 @@ const emptyCoding = () => ({
   starterCode: '',
   language: 'python',
   points: 5,
-  testCases: [{ input: '', expectedOutput: '' }],
+  testCases: [{ input: '', expectedOutput: '', isHidden: false }],
 });
 
 const syncSectionQuestions = (existingQuestions = [], count, createQuestion) =>
@@ -101,7 +104,7 @@ const validateSections = (sections) => {
         if (
           question.testCases.some(
             (testCase) =>
-              !testCase.input.trim() || !testCase.expectedOutput.trim()
+              !testCase.expectedOutput.trim()
           )
         ) {
           return `${section.title}: Complete every test case for question ${questionNumber}`;
@@ -240,8 +243,33 @@ const CreateExam = () => {
                       ...question,
                       testCases: [
                         ...(question.testCases || []),
-                        { input: '', expectedOutput: '' },
+                        { input: '', expectedOutput: '', isHidden: false },
                       ],
+                    }
+              ),
+            }
+      )
+    );
+  };
+
+  const removeTestCase = (sIdx, qIdx, tIdx) => {
+    updateSections((prevSections) =>
+      prevSections.map((section, sectionIndex) =>
+        sectionIndex !== sIdx
+          ? section
+          : {
+              ...section,
+              questions: section.questions.map((question, questionIndex) =>
+                questionIndex !== qIdx
+                  ? question
+                  : {
+                      ...question,
+                      testCases:
+                        (question.testCases || []).length > 1
+                          ? question.testCases.filter(
+                              (_, testCaseIndex) => testCaseIndex !== tIdx
+                            )
+                          : question.testCases,
                     }
               ),
             }
@@ -267,8 +295,8 @@ const CreateExam = () => {
         return setError('Duration must be at least 1 minute');
       }
 
-      const start = new Date(exam.startTime);
-      const end = new Date(exam.endTime);
+      const start = new Date(toIsoDateTime(exam.startTime));
+      const end = new Date(toIsoDateTime(exam.endTime));
 
       if (start <= new Date()) {
         return setError('Start time must be in the future');
@@ -289,26 +317,7 @@ const CreateExam = () => {
         return setError(validationError);
       }
 
-      const totalQuestions = sections.reduce(
-        (sum, s) => sum + s.questions.length,
-        0
-      );
-
-      const totalPoints = sections.reduce(
-        (sum, s) =>
-          sum +
-          s.questions.reduce((qSum, q) => qSum + Number(q.points || 0), 0),
-        0
-      );
-
-      const payload = {
-        ...exam,
-        sections,
-        totalQuestions,
-        totalPoints,
-        isActive: true,
-        faceDetectionRequired: true,
-      };
+      const payload = buildExamPayload({ ...exam, sections });
 
       await examAPI.createExam(payload);
 
@@ -532,6 +541,26 @@ const CreateExam = () => {
 
                     {q.testCases.map((tc, tIdx) => (
                       <Box key={tIdx} sx={{ mt: 1 }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            mb: 1,
+                          }}
+                        >
+                          <Typography variant="subtitle2">
+                            Test Case {tIdx + 1}
+                          </Typography>
+                          <Button
+                            color="error"
+                            size="small"
+                            disabled={q.testCases.length === 1}
+                            onClick={() => removeTestCase(sIdx, qIdx, tIdx)}
+                          >
+                            Remove
+                          </Button>
+                        </Box>
                         <TextField
                           fullWidth
                           label="Input"
@@ -561,8 +590,30 @@ const CreateExam = () => {
                             )
                           }
                         />
+                        <FormControlLabel
+                          sx={{ mt: 1 }}
+                          control={
+                            <Checkbox
+                              checked={Boolean(tc.isHidden)}
+                              onChange={(e) =>
+                                updateTestCase(
+                                  sIdx,
+                                  qIdx,
+                                  tIdx,
+                                  'isHidden',
+                                  e.target.checked
+                                )
+                              }
+                            />
+                          }
+                          label="Hidden from students"
+                        />
                       </Box>
                     ))}
+
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      Visible test cases are shown to students. Hidden ones are used only for evaluation.
+                    </Typography>
 
                     <Button onClick={() => addTestCase(sIdx, qIdx)}>
                       Add Test Case

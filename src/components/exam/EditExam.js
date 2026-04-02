@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Checkbox,
   Container,
   Typography,
   TextField,
@@ -9,12 +10,18 @@ import {
   Box,
   Card,
   CardContent,
+  FormControlLabel,
   Grid,
   MenuItem,
   Divider,
 } from '@mui/material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { examAPI } from '../../utils/api';
+import {
+  buildExamPayload,
+  toIsoDateTime,
+  toLocalDateTimeInputValue,
+} from './examFormUtils';
 
 const emptyMCQ = () => ({
   questionType: 'mcq',
@@ -30,7 +37,7 @@ const emptyCoding = () => ({
   starterCode: '',
   language: 'python',
   points: 5,
-  testCases: [{ input: '', expectedOutput: '' }],
+  testCases: [{ input: '', expectedOutput: '', isHidden: false }],
 });
 
 const syncSectionQuestions = (existingQuestions = [], count, createQuestion) =>
@@ -111,7 +118,7 @@ const validateSections = (sections) => {
         if (
           question.testCases.some(
             (testCase) =>
-              !testCase.input.trim() || !testCase.expectedOutput.trim()
+              !testCase.expectedOutput.trim()
           )
         ) {
           return `${section.title}: Complete every test case for question ${questionNumber}`;
@@ -132,8 +139,8 @@ const normalizeExamForEditing = (rawExam) => {
 
   return {
     ...rawExam,
-    startTime: rawExam.startTime ? rawExam.startTime.slice(0, 16) : '',
-    endTime: rawExam.endTime ? rawExam.endTime.slice(0, 16) : '',
+    startTime: toLocalDateTimeInputValue(rawExam.startTime),
+    endTime: toLocalDateTimeInputValue(rawExam.endTime),
     sections: buildSectionsFromCounts(
       sections.map((section) => ({
         ...section,
@@ -146,8 +153,11 @@ const normalizeExamForEditing = (rawExam) => {
           testCases:
             question.questionType === 'coding'
               ? question.testCases?.length
-                ? question.testCases
-                : [{ input: '', expectedOutput: '' }]
+                ? question.testCases.map((testCase) => ({
+                    ...testCase,
+                    isHidden: Boolean(testCase.isHidden),
+                  }))
+                : [{ input: '', expectedOutput: '', isHidden: false }]
               : question.testCases,
           language:
             question.questionType === 'coding'
@@ -165,20 +175,19 @@ const normalizeExamForEditing = (rawExam) => {
 
 const EditExam = () => {
   const { examId } = useParams();
-  const navigate = useNavigate();
 
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [mcqCount, setMcqCount] = useState(0);
   const [codingCount, setCodingCount] = useState(0);
 
-  useEffect(() => {
-    loadExam();
-  }, []);
-
-  const loadExam = async () => {
+  const loadExam = useCallback(async () => {
     try {
+      setLoading(true);
+      setError('');
       if (!examId) {
         setError('Invalid exam id');
         return;
@@ -219,7 +228,11 @@ const EditExam = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [examId]);
+
+  useEffect(() => {
+    loadExam();
+  }, [loadExam]);
 
   const updateSections = (updater) => {
     setExam((prevExam) => ({
@@ -227,6 +240,7 @@ const EditExam = () => {
       sections:
         typeof updater === 'function' ? updater(prevExam.sections) : updater,
     }));
+    setSuccess('');
   };
 
   const handleQuestionCountChange = (type, value) => {
@@ -239,6 +253,8 @@ const EditExam = () => {
     } else {
       setCodingCount(parsedValue);
     }
+
+    setSuccess('');
 
     setExam((prevExam) => ({
       ...prevExam,
@@ -327,8 +343,33 @@ const EditExam = () => {
                       ...question,
                       testCases: [
                         ...(question.testCases || []),
-                        { input: '', expectedOutput: '' },
+                        { input: '', expectedOutput: '', isHidden: false },
                       ],
+                    }
+              ),
+            }
+      )
+    );
+  };
+
+  const removeTestCase = (sIdx, qIdx, tIdx) => {
+    updateSections((prevSections) =>
+      prevSections.map((section, sectionIndex) =>
+        sectionIndex !== sIdx
+          ? section
+          : {
+              ...section,
+              questions: section.questions.map((question, questionIndex) =>
+                questionIndex !== qIdx
+                  ? question
+                  : {
+                      ...question,
+                      testCases:
+                        (question.testCases || []).length > 1
+                          ? question.testCases.filter(
+                              (_, testCaseIndex) => testCaseIndex !== tIdx
+                            )
+                          : question.testCases,
                     }
               ),
             }
@@ -338,7 +379,9 @@ const EditExam = () => {
 
   const handleSave = async () => {
     try {
+      setSaving(true);
       setError('');
+      setSuccess('');
 
       if (!exam.title.trim() || !exam.description.trim()) {
         return setError('Title and description are required');
@@ -352,8 +395,8 @@ const EditExam = () => {
         return setError('Duration must be at least 1 minute');
       }
 
-      const start = new Date(exam.startTime);
-      const end = new Date(exam.endTime);
+      const start = new Date(toIsoDateTime(exam.startTime));
+      const end = new Date(toIsoDateTime(exam.endTime));
 
       if (end <= start) {
         return setError('End time must be after start time');
@@ -368,36 +411,24 @@ const EditExam = () => {
         return setError(validationError);
       }
 
-      const totalQuestions = exam.sections.reduce(
-        (sum, section) => sum + section.questions.length,
-        0
+      const response = await examAPI.updateExam(examId, buildExamPayload(exam));
+      const normalizedExam = normalizeExamForEditing(response.data.exam);
+
+      setExam(normalizedExam);
+      setMcqCount(
+        normalizedExam.sections.find((section) => section.sectionType === 'mcq')
+          ?.questions.length || 0
       );
-
-      const totalPoints = exam.sections.reduce(
-        (sum, section) =>
-          sum +
-          section.questions.reduce(
-            (questionSum, question) => questionSum + Number(question.points || 0),
-            0
-          ),
-        0
+      setCodingCount(
+        normalizedExam.sections.find(
+          (section) => section.sectionType === 'coding'
+        )?.questions.length || 0
       );
-
-      await examAPI.updateExam(examId, {
-        title: exam.title,
-        description: exam.description,
-        subject: exam.subject,
-        duration: Number(exam.duration),
-        startTime: exam.startTime,
-        endTime: exam.endTime,
-        sections: exam.sections,
-        totalQuestions,
-        totalPoints,
-      });
-
-      navigate('/dashboard');
-    } catch {
-      setError('Failed to update exam');
+      setSuccess('Exam updated successfully');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update exam');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -426,6 +457,7 @@ const EditExam = () => {
       </Typography>
 
       {error && <Alert severity="error">{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mt: 2 }}>{success}</Alert>}
 
       <Card sx={{ mb: 3 }}>
         <CardContent>
@@ -633,6 +665,26 @@ const EditExam = () => {
 
                     {question.testCases.map((testCase, tIdx) => (
                       <Box key={tIdx} sx={{ mt: 1 }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            mb: 1,
+                          }}
+                        >
+                          <Typography variant="subtitle2">
+                            Test Case {tIdx + 1}
+                          </Typography>
+                          <Button
+                            color="error"
+                            size="small"
+                            disabled={question.testCases.length === 1}
+                            onClick={() => removeTestCase(sIdx, qIdx, tIdx)}
+                          >
+                            Remove
+                          </Button>
+                        </Box>
                         <TextField
                           fullWidth
                           label="Input"
@@ -663,8 +715,30 @@ const EditExam = () => {
                             )
                           }
                         />
+                        <FormControlLabel
+                          sx={{ mt: 1 }}
+                          control={
+                            <Checkbox
+                              checked={Boolean(testCase.isHidden)}
+                              onChange={(e) =>
+                                updateTestCase(
+                                  sIdx,
+                                  qIdx,
+                                  tIdx,
+                                  'isHidden',
+                                  e.target.checked
+                                )
+                              }
+                            />
+                          }
+                          label="Hidden from students"
+                        />
                       </Box>
                     ))}
+
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      Visible test cases are shown to students. Hidden ones are used only for evaluation.
+                    </Typography>
 
                     <Button sx={{ mt: 1 }} onClick={() => addTestCase(sIdx, qIdx)}>
                       Add Test Case
@@ -679,8 +753,8 @@ const EditExam = () => {
         </Card>
       ))}
 
-      <Button variant="contained" sx={{ mt: 1 }} onClick={handleSave}>
-        Save Changes
+      <Button variant="contained" sx={{ mt: 1 }} onClick={handleSave} disabled={saving}>
+        {saving ? 'Saving...' : 'Save Changes'}
       </Button>
     </Container>
   );

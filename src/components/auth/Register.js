@@ -38,6 +38,7 @@ const Register = () => {
     confirmPassword: '',
     role: 'student',
     studentId: '',
+    teacherId: '',
     department: '',
     year: '',
     semester: '',
@@ -71,6 +72,10 @@ const Register = () => {
       setError('Student ID is required for students');
       return false;
     }
+    if (formData.role === 'teacher' && !formData.teacherId) {
+      setError('Teacher ID is required for teachers');
+      return false;
+    }
     return true;
   };
 
@@ -95,6 +100,9 @@ const Register = () => {
         department: formData.department,
         year: parseInt(formData.year),
         semester: parseInt(formData.semester),
+      }),
+      ...(formData.role === 'teacher' && {
+        teacherId: formData.teacherId,
       }),
     };
 
@@ -315,6 +323,27 @@ const Register = () => {
                     </FormControl>
                   </Grid>
                 </>
+              )}
+
+              {formData.role === 'teacher' && (
+                <Grid item xs={12}>
+                  <TextField
+                    required
+                    fullWidth
+                    id="teacherId"
+                    label="Teacher ID"
+                    name="teacherId"
+                    value={formData.teacherId}
+                    onChange={handleChange}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Badge color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
               )}
 
               <Grid item xs={12}>

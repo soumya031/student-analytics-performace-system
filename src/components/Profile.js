@@ -245,6 +245,11 @@ const Profile = () => {
                       Student ID: {user?.studentId}
                     </Typography>
                   )}
+                  {user?.role === 'teacher' && (
+                    <Typography variant="body2" color="text.secondary">
+                      Teacher ID: {user?.teacherId}
+                    </Typography>
+                  )}
                 </Box>
               </Box>
 

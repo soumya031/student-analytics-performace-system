@@ -1,14 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Container,
-  Typography,
+  Alert,
   Box,
-  RadioGroup,
-  Radio,
-  FormControlLabel,
   Button,
+  Container,
   Divider,
-  Alert
+  FormControlLabel,
+  Radio,
+  RadioGroup,
+  Typography,
 } from '@mui/material';
 import Editor from '@monaco-editor/react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -19,9 +19,8 @@ const ExamTaking = () => {
   const navigate = useNavigate();
 
   const [exam, setExam] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
-  const timerRef = useRef(null);
-
   const [mcqAnswers, setMcqAnswers] = useState([]);
   const [codingAnswers, setCodingAnswers] = useState([]);
   const [runOutput, setRunOutput] = useState({});
@@ -29,93 +28,20 @@ const ExamTaking = () => {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  
-  useEffect(() => {
-    const loadExam = async () => {
-      try {
-        const res = await examAPI.getExam(examId);
-        setExam(res.data.exam);
+  const timerRef = useRef(null);
+  const hasAutoSubmittedRef = useRef(false);
 
-        await examAPI.startExam(examId);
-
-        setTimeLeft(res.data.exam.duration * 60);
-      } catch (err) {
-        setError(err.response?.data?.message || 'Failed to load exam');
-      }
-    };
-    loadExam();
-  }, [examId]);
-
-  
-  useEffect(() => {
-    if (timeLeft <= 0 && exam) {
-      handleSubmit(true);
-      return;
-    }
-
-    timerRef.current = setInterval(() => {
-      setTimeLeft(t => t - 1);
-    }, 1000);
-
-    return () => clearInterval(timerRef.current);
-  }, [timeLeft]);
-
-  
-  useEffect(() => {
-    const onBlur = () => {
-      setViolations(v => v + 1);
-      alert('⚠ Tab switch detected!');
-    };
-
-    const onCopy = e => {
-      e.preventDefault();
-      setViolations(v => v + 1);
-      alert('⚠ Copy disabled!');
-    };
-
-    window.addEventListener('blur', onBlur);
-    document.addEventListener('copy', onCopy);
-
-    return () => {
-      window.removeEventListener('blur', onBlur);
-      document.removeEventListener('copy', onCopy);
-    };
-  }, []);
-
-  
-  const handleMcq = (sIdx, qIdx, selectedAnswer) => {
-    setMcqAnswers(prev => [
-      ...prev.filter(a => !(a.sectionIndex === sIdx && a.questionIndex === qIdx)),
-      { sectionIndex: sIdx, questionIndex: qIdx, selectedAnswer, timeSpent: 0 }
-    ]);
-  };
-
-  
-  const runCode = async (sIdx, qIdx, code, language) => {
-    try {
-      const res = await examAPI.compileExam(examId, { code, language });
-
-      setRunOutput(prev => ({
-        ...prev,
-        [`${sIdx}-${qIdx}`]: res.data.result.output || res.data.result.stderr
-      }));
-    } catch (err) {
-      setRunOutput(prev => ({
-        ...prev,
-        [`${sIdx}-${qIdx}`]: err.response?.data?.message || 'Failed to run code'
-      }));
-    }
-  };
-
-  
-  const handleSubmit = async () => {
-    if (submitting) return;
+  const handleSubmit = useCallback(async () => {
+    if (!exam || submitting) return;
 
     clearInterval(timerRef.current);
     setSubmitting(true);
     setError('');
 
     try {
+      const durationMinutes = Number(exam.duration || 0);
+      const timeTaken = Math.max(0, durationMinutes - Math.floor(timeLeft / 60));
+
       const response = await examAPI.submitExam(examId, {
         mcqAnswers,
         codingAnswers: codingAnswers.map((answer) => ({
@@ -123,14 +49,16 @@ const ExamTaking = () => {
           code: answer.code || '',
           timeSpent: answer.timeSpent || 0,
         })),
-        timeTaken: exam.duration - Math.floor(timeLeft / 60),
-        cheatingAttempts: [
-          {
-            timestamp: new Date(),
-            type: 'tab_switch',
-            description: `${violations} violations`
-          }
-        ]
+        timeTaken,
+        cheatingAttempts: violations > 0
+          ? [
+              {
+                timestamp: new Date(),
+                type: 'tab_switch',
+                description: `${violations} violation(s) detected`,
+              },
+            ]
+          : [],
       });
 
       localStorage.setItem(
@@ -151,13 +79,171 @@ const ExamTaking = () => {
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit exam');
       setSubmitting(false);
+      hasAutoSubmittedRef.current = false;
+    }
+  }, [codingAnswers, exam, examId, mcqAnswers, navigate, submitting, timeLeft, violations]);
+
+  useEffect(() => {
+    const loadExam = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        const res = await examAPI.getExam(examId);
+        setExam(res.data.exam);
+        setTimeLeft(Number(res.data.exam.duration || 0) * 60);
+
+        const startResponse = await examAPI.startExam(examId);
+        if (startResponse.data?.isCompleted) {
+          navigate(`/exam/${examId}/result`);
+          return;
+        }
+      } catch (err) {
+        const message = err.response?.data?.message || 'Failed to load exam';
+        setError(message);
+
+        if (message === 'Already attempted') {
+          navigate(`/exam/${examId}/result`);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadExam();
+  }, [examId, navigate]);
+
+  useEffect(() => {
+    if (!exam || submitting) return undefined;
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft((currentTime) => {
+        if (currentTime <= 1) {
+          clearInterval(timerRef.current);
+          return 0;
+        }
+        return currentTime - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerRef.current);
+  }, [exam, submitting]);
+
+  useEffect(() => {
+    if (!exam || submitting || timeLeft > 0 || hasAutoSubmittedRef.current) {
+      return;
+    }
+
+    hasAutoSubmittedRef.current = true;
+    handleSubmit();
+  }, [exam, handleSubmit, submitting, timeLeft]);
+
+  useEffect(() => {
+    const onBlur = () => {
+      setViolations((value) => value + 1);
+    };
+
+    const onCopy = (event) => {
+      event.preventDefault();
+      setViolations((value) => value + 1);
+    };
+
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('copy', onCopy);
+
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('copy', onCopy);
+    };
+  }, []);
+
+  const handleMcq = (sectionIndex, questionIndex, selectedAnswer) => {
+    setMcqAnswers((previousAnswers) => [
+      ...previousAnswers.filter(
+        (answer) =>
+          !(answer.sectionIndex === sectionIndex && answer.questionIndex === questionIndex)
+      ),
+      {
+        sectionIndex,
+        questionIndex,
+        selectedAnswer,
+        timeSpent: 0,
+      },
+    ]);
+  };
+
+  const handleCodingChange = (sectionIndex, questionIndex, code, language) => {
+    setCodingAnswers((previousAnswers) => [
+      ...previousAnswers.filter(
+        (answer) =>
+          !(answer.sectionIndex === sectionIndex && answer.questionIndex === questionIndex)
+      ),
+      {
+        sectionIndex,
+        questionIndex,
+        code: code || '',
+        language: language || 'python',
+        timeSpent: 0,
+      },
+    ]);
+  };
+
+  const runCode = async (sectionIndex, questionIndex, code, language) => {
+    try {
+      const res = await examAPI.compileExam(examId, {
+        code,
+        language,
+        sectionIndex,
+        questionIndex,
+      });
+      setRunOutput((previousOutput) => ({
+        ...previousOutput,
+        [`${sectionIndex}-${questionIndex}`]:
+          res.data.result.output || res.data.result.stderr || 'No output',
+      }));
+    } catch (err) {
+      setRunOutput((previousOutput) => ({
+        ...previousOutput,
+        [`${sectionIndex}-${questionIndex}`]:
+          err.response?.data?.message || 'Failed to run code',
+      }));
     }
   };
+
+  const selectedMcqAnswers = useMemo(
+    () =>
+      new Map(
+        mcqAnswers.map((answer) => [
+          `${answer.sectionIndex}-${answer.questionIndex}`,
+          String(answer.selectedAnswer),
+        ])
+      ),
+    [mcqAnswers]
+  );
+
+  const selectedCodingAnswers = useMemo(
+    () =>
+      new Map(
+        codingAnswers.map((answer) => [
+          `${answer.sectionIndex}-${answer.questionIndex}`,
+          answer,
+        ])
+      ),
+    [codingAnswers]
+  );
+
+  if (loading) {
+    return (
+      <Container sx={{ mt: 4 }}>
+        <Typography>Loading exam...</Typography>
+      </Container>
+    );
+  }
 
   if (!exam) {
     return (
       <Container sx={{ mt: 4 }}>
-        {error ? <Alert severity="error">{error}</Alert> : <Typography>Loading...</Typography>}
+        <Alert severity="error">{error || 'Exam not found'}</Alert>
       </Container>
     );
   }
@@ -165,12 +251,17 @@ const ExamTaking = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
       <Typography variant="h4">{exam.title}</Typography>
-      <Typography color="error">
-        ⏱ Time Left: {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
+      <Typography color="text.secondary" sx={{ mt: 1 }}>
+        {exam.description}
+      </Typography>
+      <Typography color="error" sx={{ mt: 2 }}>
+        Time Left: {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
       </Typography>
 
       {violations > 0 && (
-        <Alert severity="warning">Violations: {violations}</Alert>
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          Violations detected: {violations}
+        </Alert>
       )}
 
       {error && (
@@ -179,74 +270,131 @@ const ExamTaking = () => {
         </Alert>
       )}
 
-      {exam.sections.map((sec, sIdx) => (
-        <Box key={sIdx} sx={{ mt: 4 }}>
-          <Typography variant="h5">{sec.title}</Typography>
+      {exam.sections.map((section, sectionIndex) => (
+        <Box key={`${section.sectionType}-${sectionIndex}`} sx={{ mt: 4 }}>
+          <Typography variant="h5">{section.title}</Typography>
+          {section.instructions && (
+            <Typography color="text.secondary" sx={{ mt: 1 }}>
+              {section.instructions}
+            </Typography>
+          )}
 
-          {sec.questions.map((q, qIdx) => (
-            <Box key={qIdx} sx={{ mt: 3 }}>
-              <Typography>{qIdx + 1}. {q.question}</Typography>
+          {section.questions.map((question, questionIndex) => {
+            const questionKey = `${sectionIndex}-${questionIndex}`;
+            const codingAnswer = selectedCodingAnswers.get(questionKey);
+            const sampleTestCases =
+              question.visibleTestCases || question.testCases || [];
 
-              {q.questionType === 'mcq' && (
-                <RadioGroup
-                  onChange={e => handleMcq(sIdx, qIdx, Number(e.target.value))}
-                >
-                  {q.options.map((opt, i) => (
-                    <FormControlLabel
-                      key={i}
-                      value={i}
-                      control={<Radio />}
-                      label={opt}
+            return (
+              <Box key={questionKey} sx={{ mt: 3 }}>
+                <Typography>
+                  {questionIndex + 1}. {question.question}
+                </Typography>
+
+                {question.questionType === 'mcq' && (
+                  <RadioGroup
+                    value={selectedMcqAnswers.get(questionKey) || ''}
+                    onChange={(event) =>
+                      handleMcq(sectionIndex, questionIndex, Number(event.target.value))
+                    }
+                  >
+                    {question.options.map((option, optionIndex) => (
+                      <FormControlLabel
+                        key={optionIndex}
+                        value={String(optionIndex)}
+                        control={<Radio />}
+                        label={option}
+                      />
+                    ))}
+                  </RadioGroup>
+                )}
+
+                {question.questionType === 'coding' && (
+                  <>
+                    {sampleTestCases.length > 0 && (
+                      <Box
+                        sx={{
+                          mt: 2,
+                          mb: 2,
+                          p: 2,
+                          bgcolor: '#f8fafc',
+                          borderRadius: 1,
+                          border: '1px solid #e2e8f0',
+                        }}
+                      >
+                        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                          Sample Test Cases
+                        </Typography>
+                        {sampleTestCases.map((testCase, testCaseIndex) => (
+                          <Box key={testCaseIndex} sx={{ mb: 1.5 }}>
+                            <Typography variant="body2">
+                              Input: {testCase.input || '(empty)'}
+                            </Typography>
+                            <Typography variant="body2">
+                              Expected Output: {testCase.expectedOutput || '(empty)'}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+
+                    <Editor
+                      height="300px"
+                      language={question.language || 'python'}
+                      value={codingAnswer?.code ?? question.starterCode ?? ''}
+                      onChange={(value) =>
+                        handleCodingChange(
+                          sectionIndex,
+                          questionIndex,
+                          value,
+                          question.language || 'python'
+                        )
+                      }
                     />
-                  ))}
-                </RadioGroup>
-              )}
 
-              {q.questionType === 'coding' && (
-                <>
-                  <Editor
-                    height="300px"
-                    language={q.language || 'python'}
-                    defaultValue={q.starterCode || ''}
-                    onChange={value => {
-                      setCodingAnswers(prev => [
-                        ...prev.filter(a => !(a.sectionIndex === sIdx && a.questionIndex === qIdx)),
-                        {
-                          sectionIndex: sIdx,
-                          questionIndex: qIdx,
-                          code: value || '',
-                          language: q.language || 'python',
-                          timeSpent: 0
-                        }
-                      ]);
-                    }}
-                  />
+                    <Button
+                      sx={{ mt: 1 }}
+                      onClick={() =>
+                        runCode(
+                          sectionIndex,
+                          questionIndex,
+                          codingAnswer?.code ?? question.starterCode ?? '',
+                          question.language || 'python'
+                        )
+                      }
+                    >
+                      Run Code
+                    </Button>
 
-                  <Button sx={{ mt: 1 }} onClick={() => {
-                    const ans = codingAnswers.find(
-                      a => a.sectionIndex === sIdx && a.questionIndex === qIdx
-                    );
-                    if (ans) runCode(sIdx, qIdx, ans.code, ans.language);
-                  }}>
-                    Run Code
-                  </Button>
+                    {runOutput[questionKey] && (
+                      <Box
+                        component="pre"
+                        sx={{
+                          mt: 2,
+                          p: 2,
+                          bgcolor: '#111827',
+                          color: '#f9fafb',
+                          borderRadius: 1,
+                          overflowX: 'auto',
+                        }}
+                      >
+                        {runOutput[questionKey]}
+                      </Box>
+                    )}
+                  </>
+                )}
 
-                  {runOutput[`${sIdx}-${qIdx}`] && (
-                    <pre>{runOutput[`${sIdx}-${qIdx}`]}</pre>
-                  )}
-                </>
-              )}
-
-              <Divider sx={{ mt: 3 }} />
-            </Box>
-          ))}
+                <Divider sx={{ mt: 3 }} />
+              </Box>
+            );
+          })}
         </Box>
       ))}
 
       <Button
         color="error"
         variant="contained"
-        sx={{ mt: 4 }}
+        sx={{ mt: 4, mb: 6 }}
         disabled={submitting}
         onClick={handleSubmit}
       >
